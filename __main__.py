@@ -1,39 +1,66 @@
+from os import wait
 import sys, traceback
 import antlr4
-import reader
+import src.sexprs_reader_printer
+from src.simbaTypes import * 
 
-def eval(ast, env):
-    return ast
+repl_env = {
+    '+': lambda a,b: a+b, # replace by sum
+    '-': lambda a,b: a-b, # - sum
+    '*': lambda a,b: a*b, # product
+    '/': lambda a,b: int(a/b), # remove the int()
+    'set': lambda x: ,
+    'find': ,
+    'get':,
+}
 
-def print(exp):
-    return exp
+_read_str  = src.sexprs_reader_printer.read_str
+_print_ast = src.sexprs_reader_printer.to_string
 
-def rep(stream):
-    while (True):
-        print(
-            eval(
-                reader.read(
-                    stream,
-                    environment={}
-                )))
+def read_sexp(stream): # returns a SymbolicExpression
+    # read_sexp the frontmatter
+    return _read_str(stream)
 
-def run(file):
-    input  = antlr4.FileStream(file, encoding='utf-8')
-    with open(file, 'r') as f:
-        code       = f.read()
-        unindented = reader.addIndentationTokens(code)
-        ds         = reader.read(antlr4.InputStream(unindented), {})
-        result     = eval(ds, {})
-        print(result)
+def eval_sexp(sexp, env):
+    if (isinstance(sexp, Symbol)): # if symbol evaluate to its binding
+        try: return env[sexp]
+        except KeyError: raise UnresolvedSymbolError(sexp)
+    # elif map
+    # elif vector
+    elif (isinstance(sexp, SymbolicExpression)): # apply the symbolic expression
+        if (sexp.positional == 0): return None
+        ## Special Forms: ##
+        head = sexp.positional[0]
+        if "def" == head:
+            a1, a2 = sexp.positional[1], sexp.positional[2]
+            res = eval_sexp(a2, env)
+            return env.set(a1, res)
+        elif "let" == head:
+            a1, a2 = sexp.positional[1], sexp.positional[2]
+            let_env = Env(env)
+            for i in range(0, len(a1), 2):
+                let_env.set(a1[i], eval_sexp(a1[i+1], let_env))
+            return eval_sexp(a2, let_env)
+        else: ## Non-Special Forms ##
+            ## evaluate the args ##
+            evaledPArgs = [eval_sexp(e, env) for e in sexp.positional] # map(lambda e: eval_sexp(e, env), sexp.positional)
+            evaledRArgs = {eval_sexp(key, env): eval_sexp(value, env) for key, value in sexp.relational}
+            ## apply the head ##
+            return evaledPArgs[0](*evaledPArgs[1:], **evaledRArgs)
+    else: # if the value is a AtomicDatatype, cannot evaluate further
+        return sexp
 
-# when called with no arguments, the command is a terminal repl
-if __name__ == "__main__" and len(sys.argv) == 1:
+def print_sexp(sexp):
+    _print_ast(sexp)
+
+def simba_repl():
     eof = False
     while not eof:
         try:
-            # line = input('>>> ')
-            # print('>>> ')
-            print(rep(antlr4.StdinStream(encoding='utf-8')))
+            line   = input('>>> ')
+            result = eval_sexp(read_sexp(line), repl_env)
+            print(f'=== {result}')
+            # print(rep(antlr4.StdinStream(encoding='utf-8')))
         except EOFError:
             eof = True
         except KeyboardInterrupt:
@@ -41,9 +68,23 @@ if __name__ == "__main__" and len(sys.argv) == 1:
             eof = True
         except Exception as e:
             print("".join(traceback.format_exception(*sys.exc_info())))
+
+# def run(file):
+#     input  = antlr4.FileStream(file, encoding='utf-8')
+#     with open(file, 'r') as f:
+#         code       = f.read_sexp()
+#         unindented = reader.addIndentationTokens(code)
+#         ds         = reader.read_sexp(antlr4.InputStream(unindented), {})
+#         result     = eval_sexp(ds, {})
+#         print(result)
+
+# when called with no arguments, the command is a terminal repl
+if __name__ == "__main__" and len(sys.argv) == 1:
+    simba_repl()
 # when called with the name of a file, will interpret that file
 elif __name__ == "__main__" and len(sys.argv) > 1:
-    run(sys.argv[1])
+    # run(sys.argv[1])
+    pass
 
 
     
