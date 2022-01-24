@@ -1,0 +1,11 @@
+(ns not-main
+  (def b 101)
+  (print "This is not main."))
+
+(ns main
+  (include not-main)
+  (def a 34)
+;;   (print a) ;; test this with namespace qualified
+;;   (print (* 23 4 5))
+  (print not-main/b)
+  )

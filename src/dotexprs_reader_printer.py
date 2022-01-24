@@ -1,26 +1,11 @@
-import antlr4
-from simbaTypes import *
-from antlr4.tree.Tree import ParseTreeWalker
-# from grammar.simbaLexer import simbaLexer
-# from grammar.simbaParser import simbaParser
-# from grammar.simbaListener import simbaListener
+from src.simbaTypes import *
+# from antlr4.tree.Tree import ParseTreeWalker
+# import dot_expr_grammar as grammar # imports simbaLexer, simbaParser
+# from src.dot_expr_grammar.simbaLexer import simbaLexer
+# from src.dot_expr_grammar.simbaParser import simbaParser
+# from src.dot_expr_grammar.simbaListener import simbaListener
 import itertools
-
-def read(inputStream, environment):
-    # print('=== Output ===')
-    lexer  = simbaLexer(inputStream)
-    stream = antlr4.CommonTokenStream(lexer)
-    parser = simbaParser(stream)
-    tree   = parser.start()
-    # print(tree.toStringTree(recog=parser))
-
-    # listener = antlr4.ParseTreeListener()
-    # ParseTreeWalker.DEFAULT.walk(listener, tree)
-
-    # printer = simbaPrintListener()
-    # walker = ParseTreeWalker()
-    # walker.walk(printer, tree)
-    # return dataStructure
+# import antlr4
 
 def addIndentationTokens(input):
     """ 
@@ -59,13 +44,21 @@ def addIndentationTokens(input):
     output = '\n'.join(new)
     return output
 
+def read_sexp(inputStream, environment):
+    # print('=== Output ===')
+    lexer  = simbaLexer(inputStream)
+    stream = antlr4.CommonTokenStream(lexer)
+    parser = simbaParser(stream)
+    tree   = parser.start()
+    # print(tree.toStringTree(recog=parser))
 
-# output = re.sub(
-#     r'(?<=[^\(]\s)[a-zA-Z]+\.',
-#     lambda match: '(' + match.group(),
-#     code,
-#     count=1
-# )
+    # listener = antlr4.ParseTreeListener()
+    # ParseTreeWalker.DEFAULT.walk(listener, tree)
+
+    # printer = simbaPrintListener()
+    # walker = ParseTreeWalker()
+    # walker.walk(printer, tree)
+    # return dataStructure
 
 # ================================================================
 #                              PRINTER
@@ -74,7 +67,7 @@ def addIndentationTokens(input):
 def to_string(obj, indent = 0):
     def _escape(s): return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
     if type(obj) == SymbolicExpression:
-        return obj.head + ". " + " ".join(map(lambda e: to_string(e), obj.positional))
+        return obj.positional[0] + ". " + " ".join(map(lambda e: to_string(e), obj.positional[1:]))
     elif type(obj) == Vector:                                    
         return "[" + " ".join(map(lambda e: to_string(e), obj)) + "]"
     elif type(obj) == Map:

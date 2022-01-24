@@ -1,0 +1,98 @@
+(comment
+  "Hello this is a comment"
+  "Next steps: we need namespaces"
+
+; let's try this out
+
+  (* 2 3)
+  (+ 2 3)
+
+  (def-tests "Quick explanation for the test"
+    (* 2 3) 6
+    (+ 2 3) 5
+    (and true true))
+; 
+  (def-tests "Boolean operators"
+    (and true true true) true
+    (and true true false) false
+    (and false true) false
+    (and false false) false
+
+    (or true true) true
+    (or true false) true
+    (or false true) true
+    (or false false) true
+
+     ; nand
+     ; xor
+    ))
+
+
+;; (def a 34)
+;; (def b 39)
+;; (def a (+ a b))
+
+;; throws an error
+;; (def dire-bonjour [nom] x
+;;   (print "bonjour!" nom))
+
+;; (dire-bonjour "Lara")
+
+;; (prn "Bonjour " "Lara")
+
+;; (print (quote (* 122  34 4)))
+
+;; (print "Hello my friend")
+
+;; (def a (quote (+ 1 2)))
+
+;; (print [12 23 34])
+
+;; (print (comment "hello there my name is Jeremie Vaney."))
+
+;; (print [1 2 3])
+
+;; (print (quote (* 1 2 3)))
+
+;; (def func (fn [] (* 1 2 3)))
+;; (print (func))
+
+;; Classic functions from the C programming language book
+;; ------------------------------------------------------
+
+;; (def hello-world
+;;   (fn [] (print "Hello, World!")))
+
+;; (def celsius-to-farenheit (fn [celsius]
+;;                             (+ (* 1.8 celsius) 32)))
+
+;; (def test
+;;   (fn [code output]
+;;     (if (= code output))))
+
+;; (print (python/abs -3))
+
+;; (vector 1 2 3)
+
+(print (* 34 56))
+
+(def a (* 234 35 3))
+
+(print a)
+
+;; these are for type setting.
+;; what about regular code comments??
+
+(md "Let's see how readable this comment is when you do write some really long explanations about something that is completely useless.
+Firstly, I would like to tell you that:
+  - This is point one
+  - this is point two
+
+Secondly, there is another point I would like to make.")
+
+(e "bvjhku")
+  ;;  this: is-that
+  ;;  that: is-this)
+
+(ns main
+    )

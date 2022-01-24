@@ -3,18 +3,19 @@ This is a simple s-exprs reader inspired by the MAL tutorial.
 """
 
 import re
-from .simbaTypes import (Symbol, Vector, Map, SymbolicExpression)
+from simbaTypes import (Symbol, Vector, Map, SymbolicExpression)
 
 class Blank(Exception): pass
 
 class SexpReader():
     """Implementation of a recursive descent parser for s-expressions.
     Reads tokens one by one."""
-    def __init__(self, tokens, position=0):
-        self.tokens = tokens
+    def __init__(self, text, position=0):
+        self.tokens = tokenize(text)
         self.position = position
 
     def next(self):
+        "Advance token position by one."
         self.position += 1
         return self.tokens[self.position-1]
 
@@ -24,12 +25,21 @@ class SexpReader():
         else:
             return None
 
-def tokenize(str: str) -> list[str]:
-    tre = re.compile(r"""[\s,]*(~@|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
-    return [t for t in re.findall(tre, str) if t[0] != ';']
+    def read_form(self):
+        if self.position > len(self.tokens)-1: raise Exception("Token out of bounds exception")
+        return read_form(self)
+
+    def read_forms(self):
+        ast = []
+        while self.position < len(self.tokens):
+            ast.append(read_form(self))
 
 def _unescape(s):
     return s.replace('\\\\', '\u029e').replace('\\"', '"').replace('\\n', '\n').replace('\u029e', '\\')
+
+def tokenize(str: str) -> list[str]:
+        tre = re.compile(r"""[\s,]*(~@|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
+        return [t for t in re.findall(tre, str) if t[0] != ';']
 
 def read_atom(reader):
     int_re = re.compile(r"-?[0-9]+$")
@@ -37,14 +47,14 @@ def read_atom(reader):
     string_re = re.compile(r'"(?:[\\].|[^\\"])*"')
     token = reader.next()
     if re.match(int_re, token):     return int(token)
-    elif re.match(float_re, token): return int(token)
+    elif re.match(float_re, token): return float(token)
     elif re.match(string_re, token):return _unescape(token[1:-1])
     elif token[0] == '"':           raise Exception("expected '\"', got EOF")
     # elif token[0] == ':':           return Keyword(token[1:])
     elif token == "nil":            return None
     elif token == "true":           return True
     elif token == "false":          return False
-    else:                           return Symbol(token)
+    else:                           return Symbol(token) # here returns symbol
 
 def read_sequence(reader, typ=list, start='(', end=')'):
     ast = typ()
@@ -70,6 +80,7 @@ def readVector(reader):
     return read_sequence(reader, Vector, '[', ']')
 
 def read_form(reader):
+    "Reads a single Simba form. Raises an exception for unmatched parens."
     token = reader.peek()
     # reader macros/transforms
     if token[0] == ';':
@@ -94,37 +105,33 @@ def read_form(reader):
     elif token == '@':
         reader.next()
         return SymbolicExpression(Symbol('deref'), read_form(reader))
-
     # list
     elif token == ')': raise Exception("unexpected ')'")
     elif token == '(': return readSymbolicExpression(reader)
-
     # vector
     elif token == ']': raise Exception("unexpected ']'");
     elif token == '[': return readVector(reader);
-
     # map
     elif token == '}': raise Exception("unexpected '}'");
     elif token == '{': return readMap(reader);
-
     # atom
     else:              return read_atom(reader);
 
-def read_str(str):
-    """read_str tokenizes the input string and returns a Simba data structure"""
-    tokens = tokenize(str)
-    if len(tokens) == 0: raise Blank("Blank Line")
-    return read_form(SexpReader(tokens))
+# def read_str(str):
+#     """read_str tokenizes the input string and returns a Simba data structures"""
+#     tokens = tokenize(str)
+#     # if len(tokens) == 0: raise Blank("Blank Line")
+#     return read_form(SexpReader(tokens))
 
 # =============================================================
 #                          PRINTER
 # =============================================================
 
-def to_string(obj):
+def to_string(obj) -> str:
     def _escape(s): return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
     if type(obj) == SymbolicExpression:
         return "(" + " ".join(map(lambda e: to_string(e), obj.positional)) + ")"
-    elif type(obj) == Vector:                                    
+    elif type(obj) == Vector:
         return "[" + " ".join(map(lambda e: to_string(e), obj)) + "]"
     elif type(obj) == Map:
         ret = []
@@ -145,16 +152,3 @@ def to_string(obj):
     #     return "(atom " + to_string(obj.val,_r) + ")"
     else:
         return obj.__str__()
-
-
-# import dotexprs_reader
-# a = read_str(
-# """
-# (defn hello [a b c]
-#     (print a b c)
-#     (print "message for u" :keyword 435334))
-# (why cant I have more exprs?)
-# """
-# )
-# print(a)
-# print(to_string(a))

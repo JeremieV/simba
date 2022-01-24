@@ -9,7 +9,26 @@
 - The interpreter evaluates Simba data structures.
 - **interpreter plugins**
 
+## Data representation
+
+- `doc` documentation is conserved as metadata in the running program. Equivalent of doc-strings. -> user-facing
+- `comment`s are not, they are only meant for the person trying to understand the inner-workings of the code -> implementer-facing
+- they should **be ignored by the compiler**
+- md and stuff compile down to `e`s
+
 ## Changelog
 
 2 Nov 2021:
 - created repository and REPL structure
+
+## Questions:
+
+- How do I import stuff
+
+## Roadmap
+
+- evaluate vectors
+- evaluate maps
+- namespaces!!
+- interop: I can wrap all of the irregular functions, however there are the library functions, and methods:
+- [x] Minus `-` should throw an error when given only one arg
