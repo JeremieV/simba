@@ -1,5 +1,11 @@
-# Simba Documentation
+ # Simba Documentation
 
+How to use Simba:
+You can use Simba from the command line by calling `src/simba.py` from the main directory.
+You can execute some files with:
+`src/simba.py <file-name> <eventual-other-file-names>*`; at which point the execution will always start in the main namespace.
+
+<!--
 ## Pieces
 
 - A **reader** is a procedure that reads a file and returns a Simba data structure.
@@ -31,4 +37,4 @@
 - evaluate maps
 - namespaces!!
 - interop: I can wrap all of the irregular functions, however there are the library functions, and methods:
-- [x] Minus `-` should throw an error when given only one arg
+- [x] Minus `-` should throw an error when given only one arg -->

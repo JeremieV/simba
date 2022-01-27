@@ -142,11 +142,11 @@ def to_string(obj) -> str:
         # if len(obj) > 0 and obj[0] == '\u029e':
         #     return ':' + obj[1:]
         return '"' + _escape(obj) + '"'
-    elif type(obj) == None:
+    elif obj is None:
         return "nil"
-    elif type(obj) == True:
+    elif obj is True:
         return "true"
-    elif type(obj) == False:
+    elif obj is False:
         return "false"
     # elif type(obj) == Atom:
     #     return "(atom " + to_string(obj.val,_r) + ")"

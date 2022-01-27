@@ -25,11 +25,12 @@ def read_sexp(string, syntax = default_syntax): # returns a SymbolicExpression
 
 class Function:
     """Functions are anonymous, but optionally named."""
-    def __init__(self, params, ast, bindings, name = None):
+    def __init__(self, params, ast, bindings, loaded_ns, name = None):
         self.name = name
         self.args = params
         self.ast  = ast
         self.bindings = bindings # the bindings should hold the bindings from the args and closure
+        self.loaded_ns = loaded_ns
     
     def __call__(self, *e_p_args, **e_r_args):
         # a fn should have no dynamically bound symbols in it.
@@ -39,11 +40,11 @@ class Function:
         res =  None
         env = SimbaEnvironment(
                 outer=self.bindings,
-                names={self.args[i]: e_p_args[i] for i in range(len(e_p_args))}
+                names={self.args[i].name: e_p_args[i] for i in range(len(e_p_args))}
             )
         for e in self.ast:
             # evaluate in an implicit do loop #
-            res = eval_sexp(e, env = env)
+            res = ns_eval_sexp(e, env = env, loaded_namespaces=self.loaded_ns)
         return res
 
 def eval_sexp(sexp, env):
@@ -63,15 +64,15 @@ def eval_sexp(sexp, env):
             return None
         ## Special Forms: ##
         head = sexp.positional[0]
-        if "def" == head:
+        if "def" == head.name:
             ## def adds a binding (from unevaluated first arg to evaled second arg) in the environment ##
             a1, a2 = sexp.positional[1], sexp.positional[2]
             res = eval_sexp(a2, env)
             return env.set(a1, res)
-        elif "quote" == head:
+        elif "quote" == head.name:
             if len(sexp.positional) != 2: raise Exception("quote expected 1 argument")
             return sexp.positional[1]
-        elif "if" == head:
+        elif "if" == head.name:
             ## If may need some more work: what is truthy? what if fewer then 3 args? ##
             if (len(sexp.positional) < 3):
                 raise SyntaxError("Too few arguments to if")
@@ -85,7 +86,7 @@ def eval_sexp(sexp, env):
                     _else = sexp.positional[3]
                     return eval_sexp(_else, env)
                 else: return None
-        elif "fn" == head:
+        elif "fn" == head.name:
             ## Anonymous function ##
             ## returns a new closure ##
             argVector, body = sexp.positional[1], sexp.positional[2:]
@@ -96,14 +97,14 @@ def eval_sexp(sexp, env):
             # for now, the entire enclosing scope in copied
             # in the future, the bindings will be only the ones references in the closure
             return Function(argVector, body, bindings)
-        elif "do" == head:
+        elif "do" == head.name:
             last = None
             for exp in sexp.positional[1:]:
                 last = eval_sexp(exp, env)
             return last
-        elif "comment" == head:
+        elif "comment" == head.name:
             return None
-        elif "let" == head:
+        elif "let" == head.name:
             ## creates a new environment and binds the values to it successively (in order) ##
             vec, body = sexp.positional[1], sexp.positional[2:]
             let_env = SimbaEnvironment(outer = env)
@@ -117,7 +118,7 @@ def eval_sexp(sexp, env):
         # elif type(head) == function:
         #     ## Call a native function ##
         #     return head(*sexp.positional[1:], **sexp.relational)
-        elif "ns" == head:
+        elif "ns" == head.name:
             # ## If the namespace is 
             # ## add a ns to the environment, and "jump" into it for evaluation ##
             # if len(sexp.positional) != 2:
@@ -167,7 +168,9 @@ repl_env = {
     '/': lambda a, *b: a / prod(b),
     '%': lambda a, b: a % b,
     'print': (lambda *args: [print(print_sexp(e)) for e in args][0]),
-    'import': lambda module: importlib.import_module(module)
+    # 'import': lambda module: importlib.import_module(module)
+    '=': lambda a, b: a == b,
+    'not': lambda a: not a
 }
 
 def eval_form(env, form, print_result = False):
@@ -240,29 +243,30 @@ def ns_eval_sexp(sexp, env, loaded_namespaces):
             return None
         ## Special Forms: ##
         head = sexp.positional[0]
-        if "def" == head:
+        if "def" == head.name:
             ## def adds a binding (from unevaluated first arg to evaled second arg) in the environment ##
             a1, a2 = sexp.positional[1], sexp.positional[2]
             res = ns_eval_sexp(a2, env, loaded_namespaces)
             return env.set(a1, res)
-        elif "quote" == head:
+        elif "quote" == head.name:
             if len(sexp.positional) != 2: raise Exception("quote expected 1 argument")
             return sexp.positional[1]
-        elif "if" == head:
-            ## If may need some more work: what is truthy? what if fewer then 3 args? ##
+        elif "if" == head.name:
+            ## If may need some more work: what is truthy? what if fewer than 3 args? ##
             if (len(sexp.positional) < 3):
                 raise SyntaxError("Too few arguments to if")
             if (len(sexp.positional) > 4):
                 raise SyntaxError("Too many arguments to if")
             cond, then = sexp.positional[1:3]
-            if cond:
+            evaled_cond = ns_eval_sexp(cond, env, loaded_namespaces)
+            if evaled_cond:
                 return ns_eval_sexp(then, env, loaded_namespaces)
             else:
                 if (len(sexp.positional) == 4):
                     _else = sexp.positional[3]
                     return ns_eval_sexp(_else, env, loaded_namespaces)
                 else: return None
-        elif "fn" == head:
+        elif "fn" == head.name:
             ## Anonymous function ##
             ## returns a new closure ##
             argVector, body = sexp.positional[1], sexp.positional[2:]
@@ -270,17 +274,17 @@ def ns_eval_sexp(sexp, env, loaded_namespaces):
             # - gather all the free variables
             # - point to the local bindings in `bindings`
             bindings = env # this is temporary: 
-            # for now, the entire enclosing scope in copied
+            # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
             # in the future, the bindings will be only the ones references in the closure
-            return Function(argVector, body, bindings)
-        elif "do" == head:
+            return Function(argVector, body, bindings, loaded_namespaces)
+        elif "do" == head.name:
             last = None
             for exp in sexp.positional[1:]:
                 last = ns_eval_sexp(exp, env, loaded_namespaces)
             return last
-        elif "comment" == head:
+        elif "comment" == head.name:
             return None
-        elif "let" == head:
+        elif "let" == head.name:
             ## creates a new environment and binds the values to it successively (in order) ##
             vec, body = sexp.positional[1], sexp.positional[2:]
             let_env = SimbaEnvironment(outer = env)
@@ -289,28 +293,30 @@ def ns_eval_sexp(sexp, env, loaded_namespaces):
             ## evaluate the body in an implicit do ##
             last = None
             for exp in body:
-                last = ns_eval_sexp(exp, let_env)
+                last = ns_eval_sexp(exp, let_env, loaded_namespaces)
             return last
         # elif type(head) == function:
         #     ## Call a native function ##
         #     return head(*sexp.positional[1:], **sexp.relational)
-        elif "ns" == head:
+        elif "ns" == head.name:
             # 1. Initialize the namespace and add it to the namespaces
             # 2. Jump into the namespace to start evaluation
             last = None
             for exp in sexp.positional[2:]:
                 last = ns_eval_sexp(exp, env, loaded_namespaces)
             return last
-        elif "include" == head:
+        elif "include" == head.name:
             # MAYBE THE NAMESPACE SHOULD ALWAYS HAVE ITSELF AS A PARENT NAMESPACE? THIS WAY I RESOLVE THE SELF-QUALIFYING PROBLEM
-            ns_name = sexp.positional[1]
+            ns_name = sexp.positional[1].name
             if ns_name not in loaded_namespaces:
                 # creates a new environment for the new namespace
-                ns_env = SimbaEnvironment(outer=loaded_namespaces[None])
+                ns_env = SimbaEnvironment(outer=loaded_namespaces['base'])
                 # evaluates the content of that namespace in the new environment
                 ns_eval_sexp(helpers.find_ns(ns_name, ast), ns_env, loaded_namespaces)
                 # add the new namespace environment to the list of loaded namespaces
                 loaded_namespaces[ns_name] = ns_env
+                # add the environment to the list of contextual namespaces
+                env.add_ns(ns_name, loaded_namespaces[ns_name])
             else:
                 env.add_ns(ns_name, loaded_namespaces[ns_name])
         else:
@@ -332,11 +338,11 @@ def namespaced_eval(ast_list):
     
     The evaluation starts in the 'main' namespace. Every time a namespace is referred, that namespace the function looks for it in its
     AST representation of the program, and evaluates it if it is the first time it is referred."""
-    ns = None
+    # ns = None
     main = helpers.find_ns("main", ast_list)
     # print(main)
     res = ns_eval_sexp(main, SimbaEnvironment(names = repl_env), loaded_namespaces = {
-        None: SimbaEnvironment(names = repl_env)
+        'base': SimbaEnvironment(names = repl_env)
     })
 
 

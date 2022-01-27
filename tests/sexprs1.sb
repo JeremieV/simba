@@ -46,14 +46,6 @@
 
 ;; (def a (quote (+ 1 2)))
 
-;; (print [12 23 34])
-
-;; (print (comment "hello there my name is Jeremie Vaney."))
-
-;; (print [1 2 3])
-
-;; (print (quote (* 1 2 3)))
-
 ;; (def func (fn [] (* 1 2 3)))
 ;; (print (func))
 
@@ -73,26 +65,3 @@
 ;; (print (python/abs -3))
 
 ;; (vector 1 2 3)
-
-(print (* 34 56))
-
-(def a (* 234 35 3))
-
-(print a)
-
-;; these are for type setting.
-;; what about regular code comments??
-
-(md "Let's see how readable this comment is when you do write some really long explanations about something that is completely useless.
-Firstly, I would like to tell you that:
-  - This is point one
-  - this is point two
-
-Secondly, there is another point I would like to make.")
-
-(e "bvjhku")
-  ;;  this: is-that
-  ;;  that: is-this)
-
-(ns main
-    )

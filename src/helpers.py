@@ -1,3 +1,5 @@
+from src.simbaTypes import Symbol
+
 def read_files(reader, files):
     """Opens, reads, and closes the files in order.
     Returns a Simba Symbolic Expression."""
@@ -41,9 +43,9 @@ def find_forms(startswith, ast_list):
     return results
 
 def find_ns(name, ast_list):
-    res = find_forms(["ns", name], ast_list)
+    res = find_forms([Symbol("ns"), Symbol(name)], ast_list)
     if len(res) > 1:
-        raise Exception(f"There is more than one {name} namespace.")
+        raise Exception(f"There is more than one `{name}` namespace.")
     if len(res) == 0:
-        raise Exception(f"No {name} namespace was found.")
+        raise Exception(f"No `{name}` namespace was found.")
     return res[0]

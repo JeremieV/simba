@@ -1,9 +1,8 @@
+#! python3
 """
 This is the only Python test file. For testing the really basic features. 
 All the other tests will be written in Simba.
 """
-# import __main__ as s
-# from __main__ import *
 
 simple_tests = [
     # literals
