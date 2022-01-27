@@ -1,6 +1,6 @@
 #! python3
 import sys, traceback
-sys.path.insert(0, '/Users/jeremievaney/Desktop/language')
+sys.path.insert(0, '.')
 from os import wait
 # import antlr4
 import sexprs_reader_printer
@@ -168,6 +168,7 @@ repl_env = {
     '/': lambda a, *b: a / prod(b),
     '%': lambda a, b: a % b,
     'print': (lambda *args: [print(print_sexp(e)) for e in args][0]),
+    'prn': (lambda *args: [print(e, end = "") for e in args][0]),
     # 'import': lambda module: importlib.import_module(module)
     '=': lambda a, b: a == b,
     'not': lambda a: not a

@@ -42,12 +42,12 @@
    (combinators/thrush 30 add3)
    33)
 
-  (test/t "Compose"
-    (do
-            (def dummy (combinators/compose not combinators/identity))))
+;;   (test/t "Compose"
+;;     (do
+;;       (def dummy (combinators/compose not combinators/identity))))
   
   (test/t "Kestrel"
-    (combinators/kestrel ['my-vector] 'discarded)
-    'my-vector)
+    (combinators/kestrel 33 "Something else")
+    33)
 ;;
-  )
+  (prn "✅ Tests completed.\n"))

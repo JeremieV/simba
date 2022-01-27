@@ -1,20 +1,17 @@
 (ns test
   (def t (fn [name test result]
-           (if (= test result)
-            ;;  (print true)
-            ;;  (print false)
-             (print "Test success")
-             (print "Test failed: " name
-                    "was expected to be " result "but got " test "instead.")
+           (if (not (= test result))
+             (prn "❗️ Test failed: `" name
+                    "` was expected to be " result " but got " test " instead. \n")
              )))
 ;;
   )
 
-(ns test-test ;; main
-  (include test)
+;; (ns test-test ;; main
+;;   (include test)
 
-  (test/t
-   "Name of the test"
-   (+ 6 5)
-   12)
-  )
+;;   (test/t
+;;    "Name of the test"
+;;    (+ 6 5)
+;;    12)
+;;   )
