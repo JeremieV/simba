@@ -1,0 +1,18 @@
+(ns test
+  (def has-failed false)
+
+  (def t (fn [name test result]
+           (if (not (= test result))
+             (do
+               (def has-failed true)
+               (prn "❗️ Test failed: `" name
+                    "` was expected to be " result " but got " test " instead. \n"))
+             )))
+  
+  (def print-done-message
+    (fn []
+      (if has-failed
+        (prn "❌ Tests completed with some failures. \n")
+        (prn "✅ Tests completed without failures. \n"))))
+  ;;
+  )

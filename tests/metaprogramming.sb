@@ -1,0 +1,12 @@
+(ns metaprogramming-test
+    (include test)
+
+    (test/t "Quote"
+        (quote ()) '()
+    )
+
+    (test/t "Quasiquote"
+        `(some-fn ,(* 2 3) 4) '(some-fn 6 4)
+    )
+
+)

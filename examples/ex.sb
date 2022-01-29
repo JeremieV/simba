@@ -1,0 +1,41 @@
+(ns main ;; examples1
+
+  (def hello-world
+    (fn [] (print "Hello, World!")))
+
+  (def celsius-to-farenheit
+    (fn [celsius]
+      (+ (* 1.8 celsius) 32)))
+
+  (comment "This is what this functions does")
+;;   (print (slice 1 (vector 1 2 3 4 5)))
+
+  (comment (print
+            (concat [1] [2 3])
+
+            (prepend 1 [23 34 5])
+
+            (append 2 [23 34 4 545])
+
+            (len [1 3 445 45])
+   ;; 
+            ))
+
+  ;; (print (quasiquote (* 1 (* 1 2))))
+  ;; (print (quasiquote hello))
+  ;; (print (quote (* 1 (* 1 2))))
+
+  ;; (print (concat '(hello there) '(hi here)))
+
+  ;; (print (prepend '(hello h) 123))
+
+  ;; (def quasiquote
+  ;;   (fn [ast]
+  ;;     (?: cond then else)))
+
+;; (print (python/abs -3))
+  
+  (defmacro mac)
+
+;;
+  )

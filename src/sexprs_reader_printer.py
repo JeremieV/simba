@@ -1,9 +1,6 @@
-"""
-This is a simple s-exprs reader inspired by the MAL tutorial.
-"""
-
 import re
 from simbaTypes import (Symbol, Vector, Map, SymbolicExpression)
+from simbaTypes import *
 
 class Blank(Exception): pass
 
@@ -148,7 +145,6 @@ def to_string(obj) -> str:
         return "true"
     elif obj is False:
         return "false"
-    # elif type(obj) == Atom:
-    #     return "(atom " + to_string(obj.val,_r) + ")"
     else:
+        # print(type(obj))
         return obj.__str__()

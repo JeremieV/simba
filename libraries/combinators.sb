@@ -29,25 +29,21 @@
   (include test)
 
   (test/t "Identity test for combinators"
-   (combinators/identity 3)
-   3)
+   (combinators/identity 3) 3)
   
   (def add3 (fn [x] (+ x 3)))
   
   (test/t "Function application"
-   (combinators/function-application add3 30)
-   33)
+   (combinators/function-application add3 30) 33)
   
   (test/t "Thrush"
-   (combinators/thrush 30 add3)
-   33)
+   (combinators/thrush 30 add3) 33)
 
 ;;   (test/t "Compose"
 ;;     (do
 ;;       (def dummy (combinators/compose not combinators/identity))))
   
   (test/t "Kestrel"
-    (combinators/kestrel 33 "Something else")
-    33)
+    (combinators/kestrel 33 "Something else") 33)
 ;;
-  (prn "✅ Tests completed.\n"))
+  (test/print-done-message))

@@ -59,7 +59,20 @@ class SymbolicExpression():
     #     self.head: str = head
     #     self.positional: list = positional
     #     self.relational: dict = relational
-        # sefl.meta = {} # meta should hold information such as line number and types maybe
+        # self.meta = {} # meta should hold information such as line number and types maybe
+    def __getitem__(self, __slice):
+        if isinstance(__slice, slice):
+            return self.positional[__slice.start: __slice.stop]
+        else:
+            return self.positional[__slice]
+
+    def __add__(self, sexp):
+        if isinstance(sexp, SymbolicExpression):
+            self.positional = self.positional + sexp.positional
+            return self
+        else: print("Quomcat!!")
+
+
 
 # Collection Data Types
 
@@ -138,7 +151,3 @@ class SimbaEnvironment():
     def add_ns(self, ns_name:str, ns):
         # print("adding ns to the environment namespaces")
         self.namespaces[ns_name] = ns
-    # def get_in_ns(self, symbol):
-    #     if ns in self.namespaces:
-    #         return self.namespaces[ns].get(symbol)
-    #     else: return self.outer.get(symbol)

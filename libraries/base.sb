@@ -1,0 +1,28 @@
+(ns main ; base
+  ;; Collection of functions and macros to be included by default with the Simba language.
+  ;; Date created: 27 January 2021
+  ;; Author: Jérémie Vaney
+
+  (def not=
+    (fn [a b] (not (= a b))))
+
+;;   (def first)
+;;   (def second)
+;;   (def rest)
+
+  (def mac
+    (macro [a b] (+ a b)))
+
+  (def is-macro-call
+    (fn [exp env]
+      (if (is-macro (nth 0 exp))
+        true
+        false)))
+
+  (print (slice 1 6 '(0 1 2 3 4 5)))
+
+  ;; (print (mac 2 3))
+  (print (is-macro-call `(,mac 2 3)))
+
+ ;;
+  )
