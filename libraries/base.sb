@@ -1,28 +1,70 @@
-(ns main ; base
+(ns base
   ;; Collection of functions and macros to be included by default with the Simba language.
   ;; Date created: 27 January 2021
   ;; Author: Jérémie Vaney
 
-  (def not=
-    (fn [a b] (not (= a b))))
+  (def defn
+    (macro [name args expr]
+           `(def ,name
+              (fn ,args ,expr))))
 
-;;   (def first)
-;;   (def second)
-;;   (def rest)
+  (def defmacro
+    (macro [name args expr]
+           `(def ,name
+              (macro ,args ,expr))))
 
-  (def mac
-    (macro [a b] (+ a b)))
 
-  (def is-macro-call
-    (fn [exp env]
-      (if (is-macro (nth 0 exp))
-        true
-        false)))
+  ;; PREDICATES
 
-  (print (slice 1 6 '(0 1 2 3 4 5)))
+  (defn not= [a b]
+    (not (= a b)))
 
-  ;; (print (mac 2 3))
-  (print (is-macro-call `(,mac 2 3)))
+  ;; (defn nil? [x]
+  ;;   (is nil x))
+
+  ; or and and implemented as macros
+
+  ;; SEQUENCES
+
+  (defn first [seq]
+    (nth 0 seq))
+
+  (defn rest [seq]
+    (slice 1 nil seq))
+
+  (defn second [seq]
+    (first (rest seq)))
+
+  (defmacro cond [fcond then & else]
+    `(if fcond
+       then
+       (if (first else))))
+
+  (defn apply []
+    ())
+
+  ;; (defn complement [predicate]
+  ;;   (fn [& args] (not (apply predicate args))))
+
+  (defn complement [predicate]
+    ;; increases orthogonality of the language as described in "On Lisp", by Paul Graham
+    (compose not predicate))
+
+;;   (def is-macro-call
+;;     (fn [exp env]
+;;       (if (is-macro (nth 0 exp))
+;;         true
+;;         false)))
+
+;;   (print (slice 1 6 '(0 1 2 3 4 5)))
+
+;;   ;; (print (mac 2 3))
+;;   (print (is-macro-call `(,mac 2 3)))
+
+  ;; (def mac-id (macro [f] ; (nth 1 f)
+  ;;                    '(f)))
+
+  ;; (print (mac-id (* a 3)))
 
  ;;
   )

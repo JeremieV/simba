@@ -38,12 +38,19 @@ class Function:
     def __call__(self, *e_p_args, **e_r_args):
         # a fn should have no dynamically bound symbols in it.
         # Its environment consists in the args + enclosed free variables at the time of creation
-        # how to I do efficient binding and binding of relational arguments?
-        # print ({self.args[i]: e_p_args[i] for i in range(len(e_p_args))})
+        # def populate_args(e_p_args):
+        # for i, arg in enumerate(self.args):
+        #     print(arg)
+        #     if arg.name == '&':
+        #         print(e_p_args[i:])
+                # print("yes!!")
+            # print(self.args[i])
+                # print(e_p_args[i:])
+
         res =  None
         env = SimbaEnvironment(
                 outer=self.bindings,
-                names={self.args[i].name: e_p_args[i] for i in range(len(e_p_args))}
+                names={self.args[i].name: arg for i, arg in enumerate(e_p_args)}
             )
         for e in self.ast:
             # evaluate in an implicit do loop #
@@ -81,11 +88,10 @@ def simba_repl():
         except Exception as e:
             print("".join(traceback.format_exception(*sys.exc_info())))
 
-# this here works perfectly but returns lists instead of symbolic expressions
 def quasiquote(ast):
     if isinstance(ast, Symbol) or isinstance(ast, Map): 
         return SymbolicExpression(Symbol('quote'), ast)
-    elif isinstance(ast, SymbolicExpression) and ast.positional[0] == Symbol("unquote"):
+    elif isinstance(ast, SymbolicExpression) and ast[0] == Symbol("unquote"):
         return ast[1]
     elif isinstance(ast, SymbolicExpression):
         res = SymbolicExpression()
@@ -94,31 +100,47 @@ def quasiquote(ast):
                 res = SymbolicExpression(Symbol('concat'), e[1], res)
             else:
                 res = SymbolicExpression(Symbol('prepend-sexp'), quasiquote(e), res)
-        # print(type(res))
         return res
     else:
         return ast
 
 def is_macro_call(ast, env):
-    if isinstance(ast[0], Symbol):
-        refers_to = env.get(ast[0].name)
+    if isinstance(ast, SymbolicExpression) and len(ast.positional) != 0 and isinstance(ast[0], Symbol):
+        try:
+            refers_to = env.get(ast[0])
+        except:
+            refers_to = None
         if isinstance(refers_to, Function) and refers_to.is_macro == True:
             return True
     return False
 
-def ns_eval_sexp(sexp, env, loaded_namespaces):
+def macroexpand(ast, env):
+    """This is the most basic macroexpansion algorithm possible:
+    While the head of the expression resolves to a macro, the corresponding
+    macro function is called on its **unevaluated** arguments.
     """
-    eval_exp evaluates a Symbolic Expression within a context.
+    while is_macro_call(ast, env):
+        macro_fn = env.get(ast[0])
+        args = ast[1:]
+        ast = macro_fn(*args)
+        # print(ast)
+    return ast
+
+def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
+    """
+    `ns_eval_exp` evaluates a Symbolic Expression within a context.
     The context is the 'environment' a mapping of names to namespaces,
     and the namespace in which the execution is working at the moment.
     By default, execution starts in the `None` namespace, which corresponds to the standard library.
     """
+    # macroexpansion step
+    sexp = macroexpand(sexp, env)
     if (isinstance(sexp, Symbol)): # if symbol evaluate to its binding
         try: return env.get(sexp)
         except KeyError: raise UnresolvedSymbolError(sexp)
     # elif map
     # elif vector
-    elif (isinstance(sexp, SymbolicExpression)): # apply the symbolic expression
+    if (isinstance(sexp, SymbolicExpression)): # apply the symbolic expression
         if len(sexp.positional) == 0:
             return None
         ## Special Forms: ##
@@ -170,6 +192,7 @@ def ns_eval_sexp(sexp, env, loaded_namespaces):
             # in the future, the bindings will be only the ones references in the closure
             return Function(argVector, body, bindings, loaded_namespaces, is_macro=True)
         elif "do" == head.name:
+            # do should create a new lexical environment
             last = None
             for exp in sexp.positional[1:]:
                 last = ns_eval_sexp(exp, env, loaded_namespaces)
@@ -177,6 +200,7 @@ def ns_eval_sexp(sexp, env, loaded_namespaces):
         elif "comment" == head.name:
             return None
         elif "let" == head.name:
+            # I should remove the let
             ## creates a new environment and binds the values to it successively (in order) ##
             vec, body = sexp.positional[1], sexp.positional[2:]
             let_env = SimbaEnvironment(outer = env)
@@ -197,23 +221,38 @@ def ns_eval_sexp(sexp, env, loaded_namespaces):
             for exp in sexp.positional[2:]:
                 last = ns_eval_sexp(exp, env, loaded_namespaces)
             return last
-        elif "include" == head.name:
+        elif "require" == head.name:
             # MAYBE THE NAMESPACE SHOULD ALWAYS HAVE ITSELF AS A PARENT NAMESPACE? THIS WAY I RESOLVE THE SELF-QUALIFYING PROBLEM
             ns_name = sexp.positional[1].name
             if ns_name not in loaded_namespaces:
                 # creates a new environment for the new namespace
-                ns_env = SimbaEnvironment(outer=loaded_namespaces['base'])
+                ns_env = SimbaEnvironment(names = repl_env)
                 # evaluates the content of that namespace in the new environment
                 ns_eval_sexp(helpers.find_ns(ns_name, ast), ns_env, loaded_namespaces)
                 # add the new namespace environment to the list of loaded namespaces
                 loaded_namespaces[ns_name] = ns_env
                 # add the environment to the list of contextual namespaces
-                env.add_ns(ns_name, loaded_namespaces[ns_name])
+                env.require_ns(ns_name, loaded_namespaces[ns_name])
             else:
-                env.add_ns(ns_name, loaded_namespaces[ns_name])
+                env.require_ns(ns_name, loaded_namespaces[ns_name])
+        elif "include" == head.name:
+            ns_name = sexp.positional[1].name
+            if ns_name not in loaded_namespaces:
+                # creates a new environment for the new namespace
+                ns_env = SimbaEnvironment(names = repl_env)
+                # evaluates the content of that namespace in the new environment
+                ns_eval_sexp(helpers.find_ns(ns_name, ast), ns_env, loaded_namespaces)
+                # add the new namespace environment to the list of loaded namespaces
+                loaded_namespaces[ns_name] = ns_env
+                # add the environment to the list of contextual namespaces
+                env.include_ns(ns_name, loaded_namespaces[ns_name])
+            else:
+                env.include_ns(ns_name, loaded_namespaces[ns_name])
         elif "quasiquote" == head.name:
             # print_sexp(quasiquote(sexp[1]))
             return ns_eval_sexp(quasiquote(sexp[1]), env, loaded_namespaces)
+        elif "macroexpand" == head.name:
+            return macroexpand(sexp[1], env)
         else:
             ## Non-Special Forms ##
             ## evaluate the args ##
@@ -233,20 +272,19 @@ def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):
     
     The evaluation starts in the 'main' namespace. Every time a namespace is referred, that namespace the function looks for it in its
     AST representation of the program, and evaluates it if it is the first time it is referred."""
+    # base_env = SimbaEnvironment(names = repl_env)
+    # # evaluate the base namespace
+    # ns_eval_sexp(, base_env, loaded_namespaces={})
     if run_tests:
         # get the test namespaces
         test_ns_list = helpers.find_test_ns(ast_list)
         # run them
         # print(test_ns_list)
         for ns in test_ns_list:
-            ns_eval_sexp(ns, SimbaEnvironment(names = repl_env), loaded_namespaces = {
-                'base': SimbaEnvironment(names = repl_env)
-            })
+            ns_eval_sexp(ns, SimbaEnvironment(names = repl_env))
         return
     main = helpers.find_ns(main_namespace, ast_list)
-    res = ns_eval_sexp(main, SimbaEnvironment(names = repl_env), loaded_namespaces = {
-        'base': SimbaEnvironment(names = repl_env)
-    })
+    res = ns_eval_sexp(main, SimbaEnvironment(names = repl_env))
 
 
 # when called with no arguments, the command is a terminal repl
@@ -260,5 +298,7 @@ elif __name__ == "__main__" and len(sys.argv) > 1:
     parser.add_argument("--run-tests", action='store_const', const=True, default=False, help="execute the tests, that is all the namespaces whose name ends in `-test`")
     args = parser.parse_args()
 
+    # if not (args.files.contains('libraries') or args.files.contains('libraries/base.sb')):
+    #     args.files = args.files + ['libraries/base.sb']
     ast = helpers.read_files(_reader, args.files)
     res = namespaced_eval(ast, args.run_tests, args.main)

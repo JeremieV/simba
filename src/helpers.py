@@ -18,12 +18,12 @@ def read_files(reader, files):
                     ast_list += read_files(reader, ['/'.join([file, name])])
         else:
             with open(file, 'r') as f:
-                program = f.read()
-                readerObj = reader.SexpReader(program)
-                while readerObj.position < len(readerObj.tokens):
-                    e = readerObj.read_form()
-                    # print(e)
-                    ast_list.append(e)
+                if file[-3:] == ".sb":    
+                    program = f.read()
+                    readerObj = reader.SexpReader(program)
+                    while readerObj.position < len(readerObj.tokens):
+                        e = readerObj.read_form()
+                        ast_list.append(e)
     return ast_list
 
 def read_files_form_by_form(reader, procedure, files):
@@ -36,7 +36,6 @@ def read_files_form_by_form(reader, procedure, files):
             readerObj = reader.SexpReader(program)
             while readerObj.position < len(readerObj.tokens):
                 e = readerObj.read_form()
-                # print(e)
                 procedure(e)
 
 def read_string_form_by_form(reader, procedure, string):
@@ -44,7 +43,6 @@ def read_string_form_by_form(reader, procedure, string):
     readerObj = reader.SexpReader(string)
     while readerObj.position < len(readerObj.tokens):
         e = readerObj.read_form()
-        # print(e)
         procedure(e)
 
 def find_forms(startswith, ast_list):
@@ -74,3 +72,6 @@ def find_ns(name, ast_list):
     if len(res) == 0:
         raise Exception(f"No `{name}` namespace was found.")
     return res[0]
+
+def get_base_namespace(reader):
+    return read_files(reader, ['libraries/base.sb'])

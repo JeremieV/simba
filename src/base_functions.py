@@ -36,15 +36,10 @@ def sb_prepend_sexp(e, sexp:SymbolicExpression):
     sexp.positional = [e] + sexp.positional
     return sexp
 
-def macroexpand(ast, env):
-    while is_macro_call(ast, env):
-        mac = env.get(ast[0])
-        ast = mac(*ast[1:])
-    return ast
-
 repl_env = {
     # predicates
-    'is-instance': isinstance,
+    'is': lambda a, b: a is b,
+    'is-instance': isinstance, # can't work for now
     'is-macro': lambda obj: True if obj.is_macro else False, # need the environment as a param
 
     # arithmetic
@@ -64,6 +59,7 @@ repl_env = {
     # 'xor':
 
     # data structure creation
+    'sexp': lambda *a, **ka: SymbolicExpression(*a, **ka),
     'vector': lambda *a: [*a],
     # map
 
@@ -89,6 +85,7 @@ repl_env = {
     # interop
     'get': getattr,
     'type': type,
+    'locals': locals,
 }
 
 def sb_print(e):

@@ -26,6 +26,7 @@ class Symbol:
     def __repr__(self):
         return str(self)
     def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, Symbol): return False
         if __o.name == self.name and __o.namespace == self.namespace: return True
         return False
 
@@ -55,16 +56,15 @@ class SymbolicExpression():
 
     def __repr__(self):
         return str(self.positional)
-    # def __init__(self, head, positional, relational):
-    #     self.head: str = head
-    #     self.positional: list = positional
-    #     self.relational: dict = relational
-        # self.meta = {} # meta should hold information such as line number and types maybe
+
     def __getitem__(self, __slice):
         if isinstance(__slice, slice):
             return self.positional[__slice.start: __slice.stop]
         else:
             return self.positional[__slice]
+
+    def __eq__(self, __o):
+        return all(value == __o[i] for i, value in enumerate(self.positional))
 
     def __add__(self, sexp):
         if isinstance(sexp, SymbolicExpression):
@@ -106,10 +106,11 @@ class UnresolvedSymbolError(Exception): pass
 class SimbaEnvironment():
     """Just like a scheme environment. Contains a mapping of symbols to namespaces and an outer environment.
     An addition that is made to the typical environment"""
-    def __init__(self, outer = None, names = {}, namespaces = {}):
+    def __init__(self, outer = None, names = {}, namespaces = {}, referred = []):
         self.outer = outer
         self.names = names
         self.namespaces = namespaces
+        self.referred = referred
     def set(self, symbol, value):
         """Change or add a binding. The binding has to be in the local namespace."""
         # there is a bug here: what if the current namespace is qualified! we could just add the current ns as param to __init__
@@ -124,18 +125,23 @@ class SimbaEnvironment():
         If the symbol is namespace-qualified, look for the binding directly in that namespace."""
         # there is a bug here bc you have to look in the namespaces of the outer envs also
         ns = symbol.namespace
-        # print (ns)
-        # print (self.namespaces)
         if ns is not None:
             # there is a bug here bc if the namespace is qualified to be the current ns
             if ns in self.namespaces:
                 return self.namespaces[ns]
-            else: return self.outer.find(symbol)
-            # return self.namespaces[symbol.namespace].find(symbol)
+            else:
+                return self.outer.find(symbol)
         if symbol.name in self.names:
             return self
+        # this aims to find the env of a symbol contained in a referred ns
+        # however there is a problem because this should allow us to rebind
+        # symbols in all referred namespaces, which is not intentional (see `set`)
+        # print(self.referred)
         if self.outer is not None:
             return self.outer.find(symbol)
+        for n in self.referred:
+            if symbol.name in n.names:
+                return n
         return None
     def get(self, symbol):
         """Returns the binding if it is in current env or parents."""
@@ -148,6 +154,9 @@ class SimbaEnvironment():
         if location is None:
             raise UnresolvedSymbolError(strkey)
         return location.get(symbol)
-    def add_ns(self, ns_name:str, ns):
-        # print("adding ns to the environment namespaces")
+    def require_ns(self, ns_name:str, ns):
         self.namespaces[ns_name] = ns
+    def include_ns(self, name, ns):
+        self.require_ns(name, ns)
+        self.referred.append(ns)
+        # it's also possible to refer individual names by creating small namespaces
