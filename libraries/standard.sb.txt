@@ -1,0 +1,83 @@
+---yaml
+project: playground
+description: ""
+url:
+license:
+dependencies:
+    - something
+default-lang: s-expr
+default-extensions: rewriting
+---
+
+namespace. standard
+;; Sketch of the standard library for Simba
+;; The entire namespace is highly inspired by the Haskell prelude and the clojure.core namespace
+
+;; ------------------------- Protocols
+
+defprotocol. eq
+    =. [a b]  ; returns true if `a == b` and false otherwise
+    !=. [a b] ; returns true if `a != b` and false otherwise
+
+defprotocol. num
+
+defprotocol. collection
+
+defprotocol. sequence
+    first. [s]
+    last.  [s]
+
+defprotocol. callable
+
+
+;; ------------------------- Functions
+
+def. let [binding expression]
+    ; evaluates expression in a context where bindings are as specified
+    ; binding is a vector of two elements
+    (fn. (first. binding)
+        expression) second. binding
+
+def. let* [bindings expression]
+    ; sequential binding
+
+
+;; ------------------------- Collections
+
+; map
+
+;; ------------------------- Sequences
+
+;; first
+; returns the first element of a sequence
+
+;; rest
+; returns the a sequence except its first element
+
+;; second
+; returns the second element of a sequence 
+fn. second [coll] compose. first rest
+
+;; ------------------------- Combinators
+;; Below are some of the combinators as a functional programming exercise
+;; a combinator is a function definition with no free variables
+;; -------------------------
+
+def. identity [x] x
+
+def. function-application [a b] a . b
+
+def. thrush [a b] b. a
+
+def. compose [f g]
+    ;; compose (bluebird combinator) : (b -> c) -> (a -> b) -> a -> c
+    fn. [x] f. g. x
+
+; aka _constant_
+def. kestrel [a b] a
+
+def. kite [a b] b
+
+def. starling [a b c] a. c. (b. c)
+
+def. mocking-bird [a] a. a

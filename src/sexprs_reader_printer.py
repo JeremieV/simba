@@ -35,7 +35,7 @@ def _unescape(s):
     return s.replace('\\\\', '\u029e').replace('\\"', '"').replace('\\n', '\n').replace('\u029e', '\\')
 
 def tokenize(str: str) -> list[str]:
-        tre = re.compile(r"""[\s]*(,@|[\[\]{}()'`~^,@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
+        tre = re.compile(r"""[\s]*(~@|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
         return [t for t in re.findall(tre, str) if t[0] != ';']
 
 def read_atom(reader):
@@ -89,10 +89,10 @@ def read_form(reader):
     elif token == '`':
         reader.next()
         return SymbolicExpression(Symbol('quasiquote'), read_form(reader))
-    elif token == ',':
+    elif token == '~':
         reader.next()
         return SymbolicExpression(Symbol('unquote'), read_form(reader))
-    elif token == ',@':
+    elif token == '~@':
         reader.next()
         return SymbolicExpression(Symbol('splice-unquote'), read_form(reader))
     # elif token == '^':

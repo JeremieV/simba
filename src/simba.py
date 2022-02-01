@@ -38,19 +38,18 @@ class Function:
     def __call__(self, *e_p_args, **e_r_args):
         # a fn should have no dynamically bound symbols in it.
         # Its environment consists in the args + enclosed free variables at the time of creation
-        # def populate_args(e_p_args):
-        # for i, arg in enumerate(self.args):
-        #     print(arg)
-        #     if arg.name == '&':
-        #         print(e_p_args[i:])
-                # print("yes!!")
-            # print(self.args[i])
-                # print(e_p_args[i:])
+        names = {}
+        for i, arg in enumerate(self.args):
+            if arg.name == '&':
+                names[self.args[i+1].name] = e_p_args[i:]
+                break
+            else:
+                names[arg.name] = e_p_args[i]
 
         res =  None
         env = SimbaEnvironment(
                 outer=self.bindings,
-                names={self.args[i].name: arg for i, arg in enumerate(e_p_args)}
+                names=names
             )
         for e in self.ast:
             # evaluate in an implicit do loop #

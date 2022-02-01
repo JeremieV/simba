@@ -64,13 +64,18 @@ class SymbolicExpression():
             return self.positional[__slice]
 
     def __eq__(self, __o):
+        if not isinstance(__o, SymbolicExpression): return False
         return all(value == __o[i] for i, value in enumerate(self.positional))
 
     def __add__(self, sexp):
         if isinstance(sexp, SymbolicExpression):
             self.positional = self.positional + sexp.positional
             return self
-        else: print("Quomcat!!")
+        # elif isinstance(sexp, tuple):
+        #     self.positional = self.positional + SymbolicExpression(sexp).positional
+        #     return self
+        else:
+            raise Exception(f"Tried to concat SymbolicExpression with unsupported type {type(sexp)}")
 
 
 

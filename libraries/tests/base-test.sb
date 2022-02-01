@@ -1,0 +1,46 @@
+(ns base-test
+  (include base)
+  (include test)
+
+  (st
+   "base"
+
+   (defn myf [a b]
+     (* a b))
+
+   (t "not="
+      (not= true true) (= true false))
+
+   (t "first"
+      (first [1 2  3]) 1)
+
+   (t "second"
+      (second [1 2 3]) 2)
+
+   (t "when"
+      (when (= 1 1)
+        true
+        true
+        false)
+      false)
+
+   (t "cond"
+      (macroexpand
+       (cond (= 1 1) "1 = 1"
+             (= 2 2) "2 = 2"
+             true    "toujours et encore"))
+      '(if (= 1 1)
+         "1 = 1"
+         (base/cond
+           (= 2 2) "2 = 2"
+           true "toujours et encore")))
+   
+   (print (or (do (print "hello") false) (do (print "second" false))))
+
+   
+;;    (print (is-empty [1]))
+;;    (defn sss [a b & rest]
+;;      (+ rest))
+;;   (print (sss 1 2 3 4))
+;;   (print (nil? nil))
+   ))

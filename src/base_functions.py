@@ -30,11 +30,43 @@ def get_attribute(obj, attr):
 def call_method(obj, method, *args, **kwargs):
     return obj.method(*args, **kwargs)
 
-def sb_prepend_sexp(e, sexp:SymbolicExpression):
-    if sexp is None:
+# def sb_prepend_sexp(e, sexp:SymbolicExpression):
+#     if sexp is None:
+#         return SymbolicExpression(e)
+#     sexp.positional = [e] + sexp.positional
+#     return sexp
+
+def sb_prepend_sexp(e, seq):
+    """Defines a generic prepend function that should work on all sequence types.
+    Returns an object of the same type as the second argument.
+    If second arg is None, defaults to a SymbolicExpression"""
+    if seq is None:
         return SymbolicExpression(e)
-    sexp.positional = [e] + sexp.positional
-    return sexp
+    # elif isinstance(seq, tuple):
+    #     return (e,) + seq
+    # elif isinstance(seq, list):
+    #     return [e] + seq
+    # elif isinstance(seq, SymbolicExpression):
+    return SymbolicExpression(e) + SymbolicExpression(*seq)
+
+def sb_generic_concat(a, b):
+    """Python has no built-in way of concatenating sequences of different types.
+    Howver, this is often needed in Simba to perform generic operations on sequences.
+    This function covers the built-in Python sequences and always returns a sequence
+    of the same type as the first value."""
+    # TODO: also define a function that works on n parameters
+    if type(a) == type(b):
+        return a+b
+    if b is None:
+        return a
+    if a is None:
+        return b
+    elif isinstance(a, tuple):
+        return a + tuple(b)
+    elif isinstance(a, list):
+        return a + list(b)
+    elif isinstance(a, SymbolicExpression):
+        return a + SymbolicExpression(*b)
 
 repl_env = {
     # predicates
@@ -61,16 +93,17 @@ repl_env = {
     # data structure creation
     'sexp': lambda *a, **ka: SymbolicExpression(*a, **ka),
     'vector': lambda *a: [*a],
-    # map
+    'tuple': lambda *a: a,
+    'hash-map': lambda *a: {key: val for key, val in zip(a, a)},
 
     # sequences
-    'len': len,
+    'count': len,
     'slice': lambda low, up = None, seq = None: seq[low:up] if seq is not None else up[low:],
     'nth': lambda i, obj: obj[i],
     'prepend-sexp': sb_prepend_sexp,
     'prepend': lambda e, coll: [e] + coll,
     'append': sb_append,
-    'concat': lambda *lists: ft.reduce(op.add, lists), # this poses certain problems bc its the add operation
+    'concat': sb_generic_concat, # lambda *lists: ft.reduce(op.add, lists), # this poses certain problems bc its the add operation
     'reverse': helpers.reverse,
 
     # collections

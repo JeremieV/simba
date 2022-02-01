@@ -1,0 +1,48 @@
+(ns datastructures-test
+  (include base)
+  (include test)
+
+;;   (defn hello [n]
+;;     (print "Testing recursion")
+;;     (when (not= 0 n)
+;;      (hello (- n 1))))
+
+;;   (hello 2)
+
+  (print (macroexpand (apply + [1 2 3])))
+
+  (test/st
+   "datastructures"
+
+   (t "Empty datastructures = false"
+      (when (tuple) true) nil
+      (when [] true) nil
+    ;;   (if [] true false) false
+      )
+
+;;    (print (rrest (tuple)))
+   ;;
+   )
+;;   (print (tuple 1 2 3 (tuple 23 3 3)))
+
+;;   (print
+;;    (concat [1 2] `(3 4)))
+
+;;   (def defn
+;;     (macro [name args & expr]
+;;            `(def ,name
+;;               (fn ,args ,@expr))))
+
+;;   (print (macroexpand
+;;           (defn hellofn []
+;;              (print "Hello")
+;;              (print "some other thing"))))
+
+;;   (defn hellofn []
+;;     (print "Hello")
+;;     (print "some other thing"))
+
+;;   (hellofn)
+
+  ;;
+  )

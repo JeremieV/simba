@@ -1,0 +1,18 @@
+(ns required)
+
+(ns included
+  
+  (def a 30)
+  
+
+  )
+
+(ns namespaces-test
+  (require test)
+  (include included)
+
+  (test/st "namespaces"
+
+   (test/t ""
+           a 30))
+  )

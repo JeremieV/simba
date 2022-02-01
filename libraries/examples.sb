@@ -1,0 +1,106 @@
+(ns examples
+  (include base)
+
+  ;; a function may have an indefinite amount of arguments:
+  ;; such functions are called variadic functions
+  (defn variadic [first second & rest]
+    (do (print first)
+        (print second)
+        (print rest)))
+
+  (variadic 12 13 1 2 3 4)
+
+  (comment
+  ;; FUNCTIONS
+  ;; =========
+
+    (def hello-world
+      (fn [] (print Hello World! "")))
+
+  ;; defn macro helps define functions more succintly
+    (defn celsius-to-farenheit [c]
+      (+ (* 1.8 c) 32))
+
+
+  ;; DATA STRUCTURES
+  ;; ===============
+  ;; simba provides some data structures and generic functions
+  ;; to manipulate them
+
+    () print
+
+    (is '() nil)
+    (is [] nil)
+
+    (concat [1] [2 3])
+
+    (prepend 1 [23 34 5])
+
+    (append 2 [23 34 4 545])
+
+    (len [1 3 445 45])
+
+  ;; METAPROGRAMMING
+  ;; ===============
+
+  ;; to understand metaprogramming in Simba we must understand quasiquoting,
+  ;; which is like quote except that it allows to evaluate some parts of its
+  ;; argument. These are prefixed by a comma.
+    (print `(+ 2 ~(* 4 5) 4))
+
+  ;; one of the strengths of Simba is metaprogramming.
+  ;; metaprogramming consists in writing programs that generate other programs.
+  ;; while it is feasible in all languages, macros coupled with homoiconicity 
+  ;; make the task easier in Simba and other Lisp-style programming languages.
+
+  ;; Macros allow us to specify transformations to do on the AST before the
+  ;; expression is executed. This opens many possibilities, often times described
+  ;; as a 'mechanism for syntactic abstraction', macros are in reality a compilation
+  ;; step of the compiler, which we can use as much or as little as we want. 
+
+  ;; for example we can easily define a macro to write infix symbolic expressions:
+    (def infix
+      (macro [infixed]
+             (sexp (nth 1 infixed) (nth 0 infixed) (nth 2 infixed))))
+
+    (print (infix (3 + 4))) "=> 7"
+
+  ;; one of the first things we might want to add once we have macros is a more
+  ;; lightweight syntax for function definitions:
+    (def define
+      (macro [name args expr]
+             (sexp 'def name
+                   (sexp 'fn args expr))))
+
+  ;; the use of the quasiquote can greatly simplify most macros:
+    (def define
+      (macro [name args expr]
+             `(def ~name
+                (fn ~args ~expr))))
+
+    (define my-func [a b]
+      (+ a b))
+
+    (print (my-func 2 3)) "=> 5"
+
+  ;; this can get hard to debug, but we can inspect the result of a macro call with `macroexpand`
+    (print (macroexpand
+            (define my-func [a b]
+              (+ a b))))
+
+  ;; while metaprogramming is powerful, it is also very fragile and can lead to hard-to understand
+  ;; bugs if not done properly. The main concern for a macro writer is variable capture.
+
+  ;; INTEROPERABILITY
+  ;; ================
+
+  ;; (print (locals))
+  ;; (print (python/abs -3))
+
+  ;; TIME COMPARISONS
+  ;; ================
+
+    (time (* 23 324 324 32432435345643636346)))
+
+  ;;
+  )
