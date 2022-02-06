@@ -1,0 +1,51 @@
+(ns combinators
+
+  (def identity (fn [x] x))
+
+  (def applyy
+    (fn [a b] (a b)))
+
+  (def thrush (fn [a b] (b a)))
+
+  ;; compose (bluebird combinator) : (b -> c) -> (a -> b) -> a -> c
+  (def compose (fn [f g]
+                 (fn [x]
+                   (f (g x)))))
+
+  ; aka _constant_
+  (def kestrel (fn [a b] a))
+
+  (def kite
+    (fn [a b] b))
+
+  (def starling
+    (fn [a b c]
+      (a (c (b c)))))
+
+  (def mocking-bird (fn [a] (a a))))
+
+(ns combinators-test
+  (require combinators)
+  (include test)
+
+  (st "combinators"
+
+      (t "Identity"
+         (combinators/identity 3) 3)
+
+      (defn add3 [x] (+ x 3))
+
+      (t "Function application"
+         (combinators/applyy add3 30) 33))
+
+  ;; (test/t "Thrush"
+  ;;  (combinators/thrush 30 add3) 33)
+
+;; ;;   (test/t "Compose"
+;; ;;     (do
+;; ;;       (def dummy (combinators/compose not combinators/identity))))
+
+;;   (test/t "Kestrel"
+;;     (combinators/kestrel 33 "Something else") 33)
+;;
+  )

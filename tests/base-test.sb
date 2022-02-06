@@ -35,9 +35,8 @@
            (= 2 2) "2 = 2"
            true "toujours et encore")))
    
-   (print (or (do (print "hello") false) (do (print "second" false))))
+   ;; (print (or (do (print "hello") false) (do (print "second" false))))
 
-   
 ;;    (print (is-empty [1]))
 ;;    (defn sss [a b & rest]
 ;;      (+ rest))

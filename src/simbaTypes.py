@@ -1,6 +1,5 @@
 """
 The data types for the Simba interpreter.
-Naming convention?
 Many data types are declared as aliases for the benefit of being able to call isinstance() to determine type (Maybe this is a bad idea).
 """
 from re import split
@@ -30,36 +29,45 @@ class Symbol:
         if __o.name == self.name and __o.namespace == self.namespace: return True
         return False
 
-# class Keyword(str): pass
 Number = (int, float)
-# String = str
-# AtomicDatatype = (String, Number)
 Environment = dict
-
-true = True
-false = False
+class Keyword(str): pass
+# class AstIgnore: pass
 
 # Symbolic Data Types
 
 class SymbolicExpression():
     """A symbolic expression contains: symbol, positional arguments, relational arguments"""
-    name = ""
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args):
         self.positional = []
-        for e in args:
-            self.positional.append(e)
-        if (kwargs): self.relational = kwargs
-        else: self.relational = {}
+        self.relational = {}
+        _skip = False
+        for i, e in enumerate(args):
+            if _skip: _skip = False; continue
+            if not isinstance(e, Keyword):
+                self.positional.append(e)
+            else:
+                self.relational[str(e)] = args[i+1]
+                _skip = True
 
     def append(self, e):
         self.positional.append(e)
 
     def __repr__(self):
-        return str(self.positional)
+        return '<SymbolicExpression>(' + str(self.positional) + str(self.relational) + ')'
+
+    def __contains__(self, item):
+        """This method overrides the Python `in` operator:
+        - If `item` is a Keyword, look in the relational arguments
+        - else, look in the positional arguments"""
+        if isinstance(item, Keyword):
+            return str(item) in self.relational
+        else:
+            return item in self.positional
 
     def __getitem__(self, __slice):
-        if isinstance(__slice, slice):
-            return self.positional[__slice.start: __slice.stop]
+        if isinstance(__slice, str):
+            return self.relational[__slice]
         else:
             return self.positional[__slice]
 
@@ -67,17 +75,19 @@ class SymbolicExpression():
         if not isinstance(__o, SymbolicExpression): return False
         return all(value == __o[i] for i, value in enumerate(self.positional))
 
+    def __len__(self):
+        return len(self.positional) + len(self.relational)
+
     def __add__(self, sexp):
         if isinstance(sexp, SymbolicExpression):
             self.positional = self.positional + sexp.positional
+            self.relational = self.relational | sexp.relational
             return self
         # elif isinstance(sexp, tuple):
         #     self.positional = self.positional + SymbolicExpression(sexp).positional
         #     return self
         else:
             raise Exception(f"Tried to concat SymbolicExpression with unsupported type {type(sexp)}")
-
-
 
 # Collection Data Types
 

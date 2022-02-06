@@ -1,0 +1,235 @@
+(ns base
+  :doc "Collection of functions and macros to be included by default with the Simba language."
+  :date-created "27 January 2022"
+  :author "Jérémie Vaney"
+
+  ;; (comment
+  ;;   "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead.
+  ;;    Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work.")
+
+  ;; CONTROL FLOW
+
+  (def defn
+    ;; notes on multiple dispatch: the multiple dispatch mechanism should be like the one
+    ;; in Julia, with dispatch based on arity, type, and the option for optional and keyword arguments
+    (fn [name args & expr]
+      :macro true
+      `(def ~name
+         (fn ~args ~@expr))))
+
+  (def defmacro
+    (fn [name args & expr]
+      :macro true
+      `(def ~name
+         (fn ~args :macro true ~@expr))))
+
+  (defmacro do [& expressions]
+    ;; evaluates the expressions in order in a new lexical environment, like a function call without arguments
+    ;; do was first a special form, and now it's a macro to simplify the language, and add a level of scope to the `do`
+    `((fn []
+        ~@expressions)))
+
+  (defmacro comment [& body]
+    nil)
+
+  ;; (defmacro let [bindings & forms]
+  ;;   `(fn []))
+
+  ;; (defmacro ns [ns-name & forms]
+  ;;   (cond
+  ;;     (= ns-name 'main) (do ~@forms)
+  ;;     (is-symbol ns-name) `(do (include base)
+  ;;                              ~@forms)))
+
+  (defmacro when [condition & clauses]
+    `(if ~condition
+       (do ~@clauses)
+       nil))
+
+  (defmacro cond [& clauses]
+    (when clauses
+      (sexp 'if (first clauses)
+            (if (rest clauses)
+              (second clauses)
+              (print "error cond"))
+            (prepend-sexp 'base/cond (rest (rest clauses))))))
+
+  (defmacro assign [name value]
+    ;; binds a value and returns it
+    `(do (def ~name ~value) ~name))
+
+  ;; COMBINATORS
+
+  ;; (defmacro apply* [f args]
+  ;;   ;; apply needs to work better. here works in very restricted situations
+  ;;   `(f ~@args))
+
+  ;; (defn apply [f args]
+  ;;   (print args)
+  ;;   (apply* f args))
+
+  (defn eval [arg]
+    ;; undercover name for the identity function
+    arg)
+
+  (defn apply [f x]
+    ;; only works for cases that take only one argument
+    (f x))
+
+  (def thrush (fn [a b] (b a)))
+
+  (defn compose [f g]
+    ;; also known as the bluebird combinator
+    ;; only works for cases that take one argument
+    (fn [x]
+      (f (g x))))
+
+  (defn complement [predicate]
+    ;; ^{:doc "Returns the logical complement of a predicate."
+    ;;   :author "Jérémie Vaney"}
+    (compose not predicate))
+
+  ;; PREDICATES
+
+  ;; (defn complement [predicate]
+  ;;   (fn [& args] (not (apply predicate args))))
+
+  (defn not= [a b]
+    (not (= a b)))
+
+  (defn is-empty [coll]
+    (= 0 (count coll)))
+
+  (defn is-odd [n]
+    (= (% 2 n) 0))
+
+  ; or and and implemented as macros
+
+  (defmacro or [& clauses]
+    ;; or is the disjunction operator
+    ;; the empty disjunction is false by convention
+    (cond (is-empty clauses) false
+          (= 1 (count clauses)) (first clauses)
+          true `(do (def cl ~(first clauses))
+                    (if cl cl (or ~@(rest clauses))))))
+
+  ;; (defmacro and [& clauses]
+  ;;   ;; by convention the empty conjuntion is true
+  ;;   (sexp))
+
+  ;; SEQUENCES
+
+  (defn map [f coll]
+    ;; I am worried this may be an extremely naive implementation - TCO?
+    (def r (rest coll))
+    (prepend (f (first coll))
+             (if r
+               (map f r)
+               [])))
+
+  ;; (comment
+  ;;   "The Clojure definition. Note that the implementation is lazy, and that calling map without a collection returns a tranduscer. Also why cons (prepend) instead of append?"
+  ;;   ([f]
+  ;;    (fn [rf]
+  ;;      (fn
+  ;;        ([] (rf))
+  ;;        ([result] (rf result))
+  ;;        ([result input]
+  ;;         (rf result (f input)))
+  ;;        ([result input & inputs]
+  ;;         (rf result (apply f input inputs))))))
+  ;;   ([f coll]
+  ;;    (lazy-seq
+  ;;     (when-let [s (seq coll)]
+  ;;       (if (chunked-seq? s)
+  ;;         (let [c    (chunk-first s)
+  ;;               size (int (count c))
+  ;;               b    (chunk-buffer size)]
+  ;;           (dotimes [i size]
+  ;;             (chunk-append b (f (.nth c i))))
+  ;;           (chunk-cons (chunk b) (map f (chunk-rest s))))
+  ;;         (cons (f (first s)) (map f (rest s))))))))
+
+  (defn filter [predicate coll]
+    ;; this function should also return a transducer when no collection is provided
+    (def [f (first coll)
+          r (rest coll)])
+    (if (predicate f)
+      (prepend f (filter predicate r))
+      (filter predicate r)))
+
+  ;; (defn reduce [f coll initial])
+
+  (defn first [seq]
+    (nth 0 seq))
+
+  (defn rest [seq]
+    (slice 1 nil seq))
+
+  (defn rrest [seq]
+    (rest (rest seq)))
+
+  (defn second [seq]
+    (first (rest seq)))
+
+  ;; (defn odds [])
+
+
+  ;; (defn evens [seq]
+  ;;   ;; from a sequence, returns a sequence containing all of its elements with pair indexes
+  ;;   ;; without losing order
+  ;;   (def new-seq (empty seq))
+  ;;   (when seq
+  ;;     (append (first seq) new-seq)))
+
+  ;; COLLECTIONS
+
+  ;; (defmacro cond [fcond then & else]
+  ;;   `(if fcond
+  ;;      then
+  ;;      (if (first else))))
+
+  ;; METAPROGRAMMING
+
+  (defmacro pme [expr]
+    ;; stands for 'print-macro-expansion'
+    `(print
+      (macroexpand ~expr)))
+
+  ;; TESTING
+  ;; the test library is baked into the base library, because it is so lightweight and performance is not a huge concern
+
+  (def *tests-have-failed* false)
+
+  (defn single-test [name test result]
+    (when (not (= test result))
+      (def *tests-have-failed* true)
+      (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
+
+  (defmacro test [name & tests]
+    `(do
+       (single-test ~name ~(first tests) ~(second tests))
+       ~(when (rrest tests)
+          `(test ~name ~@(rrest tests)))))
+
+  (defmacro start-tests [name & tests]
+    ;; st stands for "start-tests"
+    `(do
+       (prn "ℹ️ Testing `" ~name "`\n")
+       ~@tests
+       (if *tests-have-failed*
+         (prn "❌ Tests completed with some failures. \n")
+         (prn "✅ Tests completed without failures. \n"))))
+
+  (defmacro time [& forms]
+    `(do (def t (instant))
+         ~@forms
+         (- (instant) t)))
+
+  (defmacro pmt [& forms]
+    `(print (measure-time ~@forms)))
+
+  ;; (print (comment (print "hello")))
+
+  ;; (print (is-macro pmt))
+)

@@ -1,0 +1,8 @@
+;; https://github.com/weavejester/cljfmt#configuration
+{:remove-surrounding-whitespace? true
+ :remove-trailing-whitespace? true
+ :remove-consecutive-blank-lines? false
+ :insert-missing-whitespace? true
+ :align-associative? false
+ :indents {test [[:inner 0]]
+           start-tests [[:inner 0]]}}

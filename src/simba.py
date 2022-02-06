@@ -1,5 +1,9 @@
 #! python3
 import sys, traceback
+from prompt_toolkit.filters.base import Filter
+
+from prompt_toolkit.shortcuts.prompt import PromptSession
+from prompt_toolkit.history import FileHistory
 
 sys.path.insert(0, '.')
 # import antlr4
@@ -9,9 +13,9 @@ from simbaTypes import *
 import importlib
 import helpers
 import timeit
-
 import functools
-import prompt_toolkit
+
+# command-line
 import argparse
 
 # _reader    = sexprs_reader_printer.SexpReader
@@ -27,14 +31,20 @@ def read_sexp(string, syntax = default_syntax): # returns a SymbolicExpression
 
 class Function:
     """Functions are anonymous, but optionally named."""
-    def __init__(self, params, ast, bindings, loaded_ns, name = None, is_macro = False):
-        self.name = name
+    def __init__(self, params, ast, bindings, loaded_ns, r_args = {}): # r_args = {}
+        # if len(params) < 1 or params[0] != Symbol('vector'): raise SyntaxError("Function declaration was expecting a vector as the first argument.")
+        self.name = r_args['name'] if 'name' in r_args else None
         self.args = params
         self.ast  = ast
         self.bindings = bindings # the bindings should hold the bindings from the args and closure
         self.loaded_ns = loaded_ns
-        self.is_macro = is_macro
-    
+        self.macro = r_args['macro'] if 'macro' in r_args else False
+        if 'meta' in r_args: self.meta = r_args['meta']
+        for k in ['macro', 'meta', 'name']:
+            if k in r_args: r_args.pop(k)
+        if r_args: self.meta = r_args
+
+    # def add_named_args(self, names):
     def __call__(self, *e_p_args, **e_r_args):
         # a fn should have no dynamically bound symbols in it.
         # Its environment consists in the args + enclosed free variables at the time of creation
@@ -52,12 +62,12 @@ class Function:
                 names=names
             )
         for e in self.ast:
-            # evaluate in an implicit do loop #
+            # evaluate in an implicit do #
             res = ns_eval_sexp(e, env = env, loaded_namespaces=self.loaded_ns)
         return res
 
-def print_sexp(sexp, syntax = default_syntax) -> str:
-    return syntax.to_string(sexp)
+def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
+    return syntax.to_string(sexp, lb=lb)
 
 from base_functions import repl_env
 
@@ -67,18 +77,28 @@ def convert(string, _from, to):
 # def simba_import(module):
 #     importlib.import_module(module)
 
-def eval_form(env, form, print_result = False):
-    result = eval_sexp(form, env)
-    if print_result: print(print_sexp(result))
+# def eval_form(env, form, print_result = False):
+#     result = eval_sexp(form, env)
+#     if print_result: print(print_sexp(result))
 
-def simba_repl():
+def simba_repl(multi = False):
     eof = False
     _env = SimbaEnvironment(names = repl_env)
+    loaded = {}
+    session = PromptSession(FileHistory('~/.simba_history'))
+    # load the standard libraries
+    ns_eval_sexp(helpers.read_files(_reader, ['standard']), _env, loaded)
+    def eval_util(e):
+        res = ns_eval_sexp(e, _env, loaded)
+        print(print_sexp(res))
     while not eof:
         try:
-            line = input('>>> ')
-            helpers.read_string_form_by_form(_reader,
-                functools.partial(eval_form, _env, print_result = True), line)
+            line = session.prompt('>>> ', multiline=multi)
+            helpers.read_string_form_by_form(
+                _reader,
+                eval_util,
+                line
+            )
         except EOFError:
             eof = True
         except KeyboardInterrupt:
@@ -88,17 +108,25 @@ def simba_repl():
             print("".join(traceback.format_exception(*sys.exc_info())))
 
 def quasiquote(ast):
+    """The quasiquote expansion algorithm"""
     if isinstance(ast, Symbol) or isinstance(ast, Map): 
         return SymbolicExpression(Symbol('quote'), ast)
+    # if isinstance(ast, Keyword):
+    #     return SymbolicExpression(Symbol('quote'), )
     elif isinstance(ast, SymbolicExpression) and ast[0] == Symbol("unquote"):
         return ast[1]
     elif isinstance(ast, SymbolicExpression):
+        relational = []
+        for k in ast.relational:
+            relational.append(Keyword(k)); relational.append(ast.relational[k])
         res = SymbolicExpression()
         for e in helpers.reverse(ast.positional):
             if isinstance(e, SymbolicExpression) and e[0] == Symbol("splice-unquote"):
                 res = SymbolicExpression(Symbol('concat'), e[1], res)
             else:
                 res = SymbolicExpression(Symbol('prepend-sexp'), quasiquote(e), res)
+        # TODO: DOES THIS ALGORITHM PERFORM MACROEXPANSION ON KEYWORD ARGUMENTS??
+        res = SymbolicExpression(Symbol('concat'), res, relational)
         return res
     else:
         return ast
@@ -109,7 +137,7 @@ def is_macro_call(ast, env):
             refers_to = env.get(ast[0])
         except:
             refers_to = None
-        if isinstance(refers_to, Function) and refers_to.is_macro == True:
+        if isinstance(refers_to, Function) and refers_to.macro == True:
             return True
     return False
 
@@ -117,6 +145,9 @@ def macroexpand(ast, env):
     """This is the most basic macroexpansion algorithm possible:
     While the head of the expression resolves to a macro, the corresponding
     macro function is called on its **unevaluated** arguments.
+
+    Further improvements to this algorithm could be automatically namespaced
+    symbols or autogensyms.
     """
     while is_macro_call(ast, env):
         macro_fn = env.get(ast[0])
@@ -137,18 +168,29 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
     if (isinstance(sexp, Symbol)): # if symbol evaluate to its binding
         try: return env.get(sexp)
         except KeyError: raise UnresolvedSymbolError(sexp)
-    # elif map
-    # elif vector
     if (isinstance(sexp, SymbolicExpression)): # apply the symbolic expression
         if len(sexp.positional) == 0:
             return None
         ## Special Forms: ##
         head = sexp.positional[0]
+        # print(head)
+        # if isinstance(head, Symbol):
+        if isinstance(head, SymbolicExpression):
+            evaledPArgs = [ns_eval_sexp(e, env, loaded_namespaces) for e in sexp.positional]
+            evaledRArgs = {ns_eval_sexp(key, env, loaded_namespaces): ns_eval_sexp(value, env, loaded_namespaces) for key, value in sexp.relational}
+            return evaledPArgs[0](*evaledPArgs[1:], **evaledRArgs)
         if "def" == head.name:
             ## def adds a binding (from unevaluated first arg to evaled second arg) in the environment ##
-            a1, a2 = sexp.positional[1], sexp.positional[2]
-            res = ns_eval_sexp(a2, env, loaded_namespaces)
-            return env.set(a1, res)
+            a1 = sexp.positional[1]
+            if isinstance(a1, list):
+                for name, value in zip(a1[0::2], a1[1::2]):
+                    res = ns_eval_sexp(value, env, loaded_namespaces)
+                    env.set(name, res)
+                return None
+            else:
+                a2 = sexp.positional[2]
+                res = ns_eval_sexp(a2, env, loaded_namespaces)
+                return env.set(a1, res)
         elif "quote" == head.name:
             if len(sexp.positional) != 2: raise Exception("quote expected 1 argument")
             return sexp.positional[1]
@@ -177,27 +219,19 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
             bindings = env # this is temporary: 
             # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
             # in the future, the bindings will be only the ones references in the closure
-            return Function(argVector, body, bindings, loaded_namespaces)
-        elif "macro" == head.name:
-            """In the end this should be replaced by a... macro"""
-            ## Anonymous function ##
-            ## returns a new closure ##
-            argVector, body = sexp.positional[1], sexp.positional[2:]
-            # what the closure should do is:
-            # - gather all the free variables
-            # - point to the local bindings in `bindings`
-            bindings = env # this is temporary: 
-            # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
-            # in the future, the bindings will be only the ones references in the closure
-            return Function(argVector, body, bindings, loaded_namespaces, is_macro=True)
-        elif "do" == head.name:
-            # do should create a new lexical environment
-            last = None
-            for exp in sexp.positional[1:]:
-                last = ns_eval_sexp(exp, env, loaded_namespaces)
-            return last
-        elif "comment" == head.name:
-            return None
+            return Function(argVector, body, bindings, loaded_namespaces, sexp.relational)
+        # elif "macro" == head.name:
+        #     """In the end this should be replaced by a... macro"""
+        #     ## Anonymous function ##
+        #     ## returns a new closure ##
+        #     argVector, body = sexp.positional[1], sexp.positional[2:]
+        #     # what the closure should do is:
+        #     # - gather all the free variables
+        #     # - point to the local bindings in `bindings`
+        #     bindings = env # this is temporary: 
+        #     # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
+        #     # in the future, the bindings will be only the ones references in the closure
+        #     return Function(argVector, body, bindings, loaded_namespaces, sexp.relational)
         elif "let" == head.name:
             # I should remove the let
             ## creates a new environment and binds the values to it successively (in order) ##
@@ -213,6 +247,38 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
         # elif type(head) == function:
         #     ## Call a native function ##
         #     return head(*sexp.positional[1:], **sexp.relational)
+        elif "try" == head.name:
+            if Keyword('catch') in sexp and Keyword('finally') in sexp:
+                try:
+                    res = None
+                    for exp in sexp[1:]:
+                        res = ns_eval_sexp(exp, env, loaded_namespaces)
+                    return res
+                except:
+                    return ns_eval_sexp(sexp['catch'], env, loaded_namespaces)
+                finally:
+                    ns_eval_sexp(sexp['finally'], env, loaded_namespaces)
+            elif Keyword('catch') in sexp:
+                try:
+                    res = None
+                    for exp in sexp[1:]:
+                        res = ns_eval_sexp(exp, env, loaded_namespaces)
+                    return res
+                except:
+                    return ns_eval_sexp(sexp['catch'], env, loaded_namespaces)
+            elif Keyword('finally') in sexp:
+                try:
+                    res = None
+                    for exp in sexp[1:]:
+                        res = ns_eval_sexp(exp, env, loaded_namespaces)
+                    return res
+                finally:
+                    ns_eval_sexp(sexp['finally'], env, loaded_namespaces)
+            else:
+                res = None
+                for exp in sexp[1:]:
+                    res = ns_eval_sexp(exp, env, loaded_namespaces)
+                return res
         elif "ns" == head.name:
             # 1. Initialize the namespace and add it to the namespaces
             # 2. Jump into the namespace to start evaluation
@@ -248,7 +314,7 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
             else:
                 env.include_ns(ns_name, loaded_namespaces[ns_name])
         elif "quasiquote" == head.name:
-            # print_sexp(quasiquote(sexp[1]))
+            # print(print_sexp(quasiquote(sexp[1])))
             return ns_eval_sexp(quasiquote(sexp[1]), env, loaded_namespaces)
         elif "macroexpand" == head.name:
             return macroexpand(sexp[1], env)
@@ -256,7 +322,7 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
             ## Non-Special Forms ##
             ## evaluate the args ##
             evaledPArgs = [ns_eval_sexp(e, env, loaded_namespaces) for e in sexp.positional]
-            evaledRArgs = {ns_eval_sexp(key, env, loaded_namespaces): ns_eval_sexp(value, env, loaded_namespaces) for key, value in sexp.relational}
+            evaledRArgs = {ns_eval_sexp(key, env, loaded_namespaces): ns_eval_sexp(sexp.relational[key], env, loaded_namespaces) for key in sexp.relational}
             ## apply the head ##
             return evaledPArgs[0](*evaledPArgs[1:], **evaledRArgs)
     else: # if the value is an atomic data type, cannot evaluate further
@@ -291,7 +357,7 @@ if __name__ == "__main__" and len(sys.argv) == 1:
     simba_repl()
 # when called with the name of a file, will interpret that file
 elif __name__ == "__main__" and len(sys.argv) > 1:
-    parser = argparse.ArgumentParser(description="This is the Simba programming language tool.")
+    parser = argparse.ArgumentParser(description="This is the Simba programming language tool. Call without arguments to start a command line repl, else the arguments specify the files to execute. At the REPL, press ALT+ENTER to submit.")
     parser.add_argument("files", metavar="FILES", nargs='*')
     parser.add_argument("--main", default="main", help="specify the namespace to start execution in (defaults to `main`)")
     parser.add_argument("--run-tests", action='store_const', const=True, default=False, help="execute the tests, that is all the namespaces whose name ends in `-test`")
@@ -299,5 +365,6 @@ elif __name__ == "__main__" and len(sys.argv) > 1:
 
     # if not (args.files.contains('libraries') or args.files.contains('libraries/base.sb')):
     #     args.files = args.files + ['libraries/base.sb']
-    ast = helpers.read_files(_reader, args.files)
+    ast = helpers.read_files(_reader, args.files) # + helpers.read_files(_reader, ['standard'])
+    # print(print_sexp(ast))
     res = namespaced_eval(ast, args.run_tests, args.main)

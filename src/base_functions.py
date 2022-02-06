@@ -8,6 +8,7 @@ import operator as op
 from math import prod
 import helpers
 from simbaTypes import SymbolicExpression
+import time
 
 def sb_add(x, y):
     if x is None:
@@ -68,18 +69,20 @@ def sb_generic_concat(a, b):
     elif isinstance(a, SymbolicExpression):
         return a + SymbolicExpression(*b)
 
+def throw(e): raise e
+
 repl_env = {
     # predicates
     'is': lambda a, b: a is b,
     'is-instance': isinstance, # can't work for now
-    'is-macro': lambda obj: True if obj.is_macro else False, # need the environment as a param
+    'is-macro': lambda obj: True if obj.macro else False, # need the environment as a param
 
     # arithmetic
     '+': lambda *a: ft.reduce(sb_add, a),
     '-': lambda a, *s: a-sum(s) if s else -a,
     '*': lambda *a: prod(a),
     '/': lambda a, *b: a / prod(b),
-    '%': lambda a, b: a % b,
+    '%': lambda a, b: b % a,
     '=': lambda a, b: a == b,
     # comparison such as ≤
 
@@ -111,6 +114,7 @@ repl_env = {
     # IO
     'print': (lambda *args: [sb_print(e) for e in args][0]),
     'prn': (lambda *args: [print(e, end = "") for e in args][0]),
+    'throw': throw,
     # 'import': lambda module: importlib.import_module(module)
     # 'time': timeit.timeit
 
@@ -119,6 +123,12 @@ repl_env = {
     'get': getattr,
     'type': type,
     'locals': locals,
+    'globals': globals,
+    'instant': time.time,
+    'exception': lambda e: Exception(e),
+    'py-compile': compile,
+    'py-eval': eval,
+    'py-exec': lambda e: exec(compile(e, '', 'single')),
 }
 
 def sb_print(e):

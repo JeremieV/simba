@@ -1,0 +1,51 @@
+(ns metaprogramming-test
+  ;; (include test)
+
+  ;; (st "metaprogramming"
+
+
+  ;;   ;; (test/t "Quote"
+  ;;   ;;     (quote ()) '()
+  ;;   ;; )
+
+  ;;     (t "Quasiquote"
+  ;;        `(some-fn ~(* 2 3) 4) '(some-fn 6 4))
+
+  ;;     ;; (t "Apply"
+  ;;     ;;   ;;  (apply + [1 2 3]) (+ 1 2 3)
+  ;;     ;;    ;; (apply - [(first [0 1]) (first (rest [0 2]))] (- 0 2))
+  ;;     ;;    )
+
+  ;;     (pme (apply * [2 3 4]))
+
+  ;;     ;;
+  ;;     )
+  ;;
+
+  (print (is-macro (fn []
+                     :macro true
+                     '(* 1 2))))
+
+  (def defn
+    (fn [name args & body]
+      :macro true
+      `(def ~name (fn ~args
+                    :macro true
+                    ~@body))))
+
+  (print (macroexpand 
+          (defn my-func []
+            (* 3 3))))
+  
+  (defn my-func []
+    (* 3 3))
+  
+  (print (my-func))
+
+  ;; (print [1 2 :number 3])
+
+  ;; (print (prepend-sexp '(hello this :something val) '(:something value)))
+
+  ;; (print '(:value)) ;-> should and does throw an error
+  ;; (print `(:hello my))
+  )

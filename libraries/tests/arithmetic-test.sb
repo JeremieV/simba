@@ -1,7 +1,0 @@
-(ns arithmetic-test
-  (include test)
-
-  (test/st "arithmetic"
-    (test/t "Basic arithmetic test"
-      (* 3 4 5 4) 240))
-  )

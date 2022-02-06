@@ -1,5 +1,5 @@
 import re
-from simbaTypes import (Symbol, Vector, Map, SymbolicExpression)
+from simbaTypes import (Symbol, Vector, Map, SymbolicExpression, Keyword)
 from simbaTypes import *
 
 class Blank(Exception): pass
@@ -47,28 +47,30 @@ def read_atom(reader):
     elif re.match(float_re, token): return float(token)
     elif re.match(string_re, token):return _unescape(token[1:-1])
     elif token[0] == '"':           raise Exception("expected '\"', got EOF")
-    # elif token[0] == ':':           return Keyword(token[1:])
+    elif token[0] == ':':           return Keyword(token[1:])
     elif token == "nil":            return None
     elif token == "true":           return True
     elif token == "false":          return False
     else:                           return Symbol(token) # here returns symbol
 
 def read_sequence(reader, typ=list, start='(', end=')'):
-    ast = typ()
+    # ast = typ()
     token = reader.next()
     if token != start: raise Exception("expected '" + start + "'")
 
+    arguments = []
     token = reader.peek()
     while token != end:
         if not token: raise Exception("expected '" + end + "', got EOF")
-        ast.append(read_form(reader))
+        arguments.append(read_form(reader))
         token = reader.peek()
     reader.next()
-    return ast
+    # print(arguments)
+    return typ(*arguments) if typ == SymbolicExpression else arguments
 
 def readMap(reader):
     lst = read_sequence(reader, list, '{', '}')
-    return Map(*lst)
+    return dict(*lst)
 
 def readSymbolicExpression(reader):
     return read_sequence(reader, SymbolicExpression, '(', ')')
@@ -102,17 +104,23 @@ def read_form(reader):
     elif token == '@':
         reader.next()
         return SymbolicExpression(Symbol('deref'), read_form(reader))
+    # elif token[0] == ':':
+    #     _tok = token[1:]
+    #     reader.next()
+    #     f = read_form(reader)
+    #     # named_arguments[-1][_tok] = f
+    #     return AstIgnore()
     # list
     elif token == ')': raise Exception("unexpected ')'")
     elif token == '(': return readSymbolicExpression(reader)
     # vector
-    elif token == ']': raise Exception("unexpected ']'");
+    elif token == ']': raise Exception("unexpected ']'")
     elif token == '[': return readVector(reader);
     # map
-    elif token == '}': raise Exception("unexpected '}'");
+    elif token == '}': raise Exception("unexpected '}'")
     elif token == '{': return readMap(reader);
     # atom
-    else:              return read_atom(reader);
+    else:              return read_atom(reader)
 
 # def read_str(str):
 #     """read_str tokenizes the input string and returns a Simba data structures"""
@@ -124,17 +132,27 @@ def read_form(reader):
 #                          PRINTER
 # =============================================================
 
-def to_string(obj) -> str:
+def to_string(obj, indent=0, lb=True) -> str:
     def _escape(s): return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+    if lb:
+        start = '\n'
+    else:
+        start = ''
     if type(obj) == SymbolicExpression:
-        return "(" + " ".join(map(lambda e: to_string(e), obj.positional)) + ")"
+        if obj.positional and obj.relational:
+            return start + " "*indent + "(" + " ".join(to_string(e,indent=indent+2) for e in obj.positional) + " " + " ".join(to_string(Keyword(key), indent=indent+2) + " " + to_string(obj.relational[key], indent=indent+2) for key in obj.relational) + ")"
+        elif obj.relational:
+            return "(" + " ".join(to_string(Keyword(key), indent=indent, lb=lb) + " " + to_string(obj.relational[key], indent=indent+2) for key in obj.relational) + ")"
+        else: return start + " "*indent + "(" + " ".join(to_string(e, indent=indent+2) for e in obj.positional) + ")"
     elif type(obj) == Vector:
-        return "[" + " ".join(map(lambda e: to_string(e), obj)) + "]"
+        return "[" + " ".join(to_string(e) for e in obj) + "]"
     elif type(obj) == Map:
         ret = []
         for k in obj.keys():
             ret.extend((to_string(k), to_string(obj[k])))
         return "{" + " ".join(ret) + "}"
+    elif type(obj) == Keyword:
+        return start + " "*indent + ':' + str(obj)
     elif type(obj) == str:
         # if len(obj) > 0 and obj[0] == '\u029e':
         #     return ':' + obj[1:]
