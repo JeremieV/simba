@@ -5,4 +5,4 @@
  :insert-missing-whitespace? true
  :align-associative? false
  :indents {test [[:inner 0]]
-           start-tests [[:inner 0]]}}
+           tests [[:inner 0]]}}

@@ -3,19 +3,20 @@
   :date-created "27 January 2022"
   :author "Jérémie Vaney"
 
-  ;; (comment
-  ;;   "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead.
-  ;;    Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work.")
-
   ;; CONTROL FLOW
 
   (def defn
+    :doc "Shorthand for defining functions.
+          The metadata is not yet preserved as it should, because the implementation cannot yet handle named parameters."
     ;; notes on multiple dispatch: the multiple dispatch mechanism should be like the one
-    ;; in Julia, with dispatch based on arity, type, and the option for optional and keyword arguments
+    ;; in Julia, with dispatch based on arity, type, and the option for optional and keyword arguments,
+    ;; with the optional ability to dispatch on an arbitrary function
     (fn [name args & expr]
       :macro true
       `(def ~name
-         (fn ~args ~@expr))))
+         (fn ~args
+          ;;  :name 
+           ~@expr))))
 
   (def defmacro
     (fn [name args & expr]
@@ -29,70 +30,140 @@
     `((fn []
         ~@expressions)))
 
-  (defmacro comment [& body]
-    nil)
-
   ;; (defmacro let [bindings & forms]
   ;;   `(fn []))
 
-  ;; (defmacro ns [ns-name & forms]
-  ;;   (cond
-  ;;     (= ns-name 'main) (do ~@forms)
-  ;;     (is-symbol ns-name) `(do (include base)
-  ;;                              ~@forms)))
+  (defmacro comment [& body]
+    nil)
 
   (defmacro when [condition & clauses]
     `(if ~condition
        (do ~@clauses)
        nil))
 
-  (defmacro cond [& clauses]
+  (defmacro cond [& clauses :else nil]
     (when clauses
       (sexp 'if (first clauses)
             (if (rest clauses)
               (second clauses)
-              (print "error cond"))
-            (prepend-sexp 'base/cond (rest (rest clauses))))))
+              (throw (exception "`cond` requires an even number of forms")))
+            (prepend-sexp 'cond (rest (rest clauses))))))
 
   (defmacro assign [name value]
-    ;; binds a value and returns it
+    :doc "Shorthand to return a value after defining it.
+          Analog of the Python 'walrus' operator."
     `(do (def ~name ~value) ~name))
+
+  (defmacro import [module-name]
+    :doc "Like require, but imports a Python module instead."
+    `(def ~module-name
+       (py-exec ~(+ "import " (str module-name) "; " (str module-name)))))
+
+  ;; MULTIMETHODS
+
+  ;; (defn register [var fn]
+  ;;   (try
+  ;;     ))
+
+  ;; (defmacro defmethod [name args & body]
+  ;;   `(if (defined ~name)
+  ;;      (register
+  ;;       (fn ~args
+  ;;         ;; :name ~name
+  ;;         ~@body))))
+
+  (defmacro is-assigned [var]
+    :doc "Returns true if the variable has a binding in the current environment, else false."
+    `(try ~var true
+          :catch false))
+
+  (defmacro defn [name args & body]
+    `(if (is-assigned ~name)
+       (.register (fn ~args ~@body) ~name)
+       (def ~name (py/Multi (fn ~args ~@body)))))
+  
+  (defn mymulti [a]
+    (+ a 10))
+
+  (defn mymulti [a b]
+    (+ a b 10))
+
+  (defn mymulti [& args]
+    (+ args))
+
+  ;; (print (mymulti 10))
+  ;; (print (mymulti 13 12))
+  ;; (print (mymulti 13 12 10))
+
+  ;; SEQUENCES
+
+  (defn first [seq]
+    (at 0 seq))
+
+  (defn rest [seq]
+    (between 1 nil seq))
+
+  (defn rrest [seq]
+    (rest (rest seq)))
+
+  (defn second [seq]
+    (first (rest seq)))
+
+  (defn take [n seq]
+    (between 0 n seq))
+
+  (defn take-last [n seq]
+    (between (- n) nil seq))
 
   ;; COMBINATORS
 
-  ;; (defmacro apply* [f args]
-  ;;   ;; apply needs to work better. here works in very restricted situations
-  ;;   `(f ~@args))
+  (defmacro apply [f & args]
+    :doc "Applies the function f to the arguments x."
+    (def l (count args))
+    (cond
+      (= 0 l) `(~f)
+      (= 1 l) `(~f ~@(first args))
+      (= 2 l) `(~f ~@(prepend (first args) (second args)))
+      ;; (< 2 l) `(~f ~@(concat (between 0 -1 args) (at -1 args)))
+      (< 2 l) `(~f ~@(concat (take (- (count args) 1) args) (first (take-last 1 args))))
+      ;
+      ))
 
-  ;; (defn apply [f args]
-  ;;   (print args)
-  ;;   (apply* f args))
+  (defn identity [x]
+    :doc "Returns its argument."
+    x)
 
-  (defn eval [arg]
-    ;; undercover name for the identity function
-    arg)
-
-  (defn apply [f x]
-    ;; only works for cases that take only one argument
-    (f x))
+  (def a 30)
+  ;; (print (apply + [1 2 (* a 30)]))
 
   (def thrush (fn [a b] (b a)))
 
+  (defn compose [] identity)
+  (defn compose [f] f)
   (defn compose [f g]
-    ;; also known as the bluebird combinator
-    ;; only works for cases that take one argument
-    (fn [x]
-      (f (g x))))
+    :doc "An extended version of the bluebird combinator."
+    (fn [& args]
+      (f (apply g args))))
 
-  (defn complement [predicate]
-    ;; ^{:doc "Returns the logical complement of a predicate."
-    ;;   :author "Jérémie Vaney"}
-    (compose not predicate))
+  ;; ((fn [& args]
+  ;;     (not (apply = args))) 1 2 3)
+
+  ;; (print ((fn [& args]
+  ;;           (print args)
+  ;;           (apply = args)) 2 2))
+
+  ;; (defn complement [predicate]
+  ;;   :doc "Returns the logical complement of a predicate."
+  ;;   (compose not predicate))
+
+  ;; REDUCERS AND TRANSDUCERS
+
+
 
   ;; PREDICATES
 
-  ;; (defn complement [predicate]
-  ;;   (fn [& args] (not (apply predicate args))))
+  (defn complement [predicate]
+    (fn [& args] (not (apply predicate args))))
 
   (defn not= [a b]
     (not (= a b)))
@@ -102,6 +173,9 @@
 
   (defn is-odd [n]
     (= (% 2 n) 0))
+
+  (defn is-even [n]
+    (complement is-odd))
 
   ; or and and implemented as macros
 
@@ -128,7 +202,7 @@
                [])))
 
   ;; (comment
-  ;;   "The Clojure definition. Note that the implementation is lazy, and that calling map without a collection returns a tranduscer. Also why cons (prepend) instead of append?"
+  ;;   "The Clojure definition. Note that the implementation is lazy, and that calling map without a collection returns a transducer."
   ;;   ([f]
   ;;    (fn [rf]
   ;;      (fn
@@ -160,18 +234,6 @@
 
   ;; (defn reduce [f coll initial])
 
-  (defn first [seq]
-    (nth 0 seq))
-
-  (defn rest [seq]
-    (slice 1 nil seq))
-
-  (defn rrest [seq]
-    (rest (rest seq)))
-
-  (defn second [seq]
-    (first (rest seq)))
-
   ;; (defn odds [])
 
 
@@ -183,11 +245,6 @@
   ;;     (append (first seq) new-seq)))
 
   ;; COLLECTIONS
-
-  ;; (defmacro cond [fcond then & else]
-  ;;   `(if fcond
-  ;;      then
-  ;;      (if (first else))))
 
   ;; METAPROGRAMMING
 
@@ -206,30 +263,33 @@
       (def *tests-have-failed* true)
       (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
 
-  (defmacro test [name & tests]
-    `(do
-       (single-test ~name ~(first tests) ~(second tests))
-       ~(when (rrest tests)
-          `(test ~name ~@(rrest tests)))))
+  (defmacro test [& tests]
+    (if (is-instance (first tests) str)
+      `(do (def *section-name* ~(first tests))
+           ~(when (rest tests)
+              `(test ~@(rest tests))))
+      `(do
+         (single-test *section-name* ~(first tests) ~(second tests))
+         ~(when (rrest tests)
+            `(test ~@(rrest tests))))))
 
-  (defmacro start-tests [name & tests]
-    ;; st stands for "start-tests"
+  (defmacro tests [name & tests]
     `(do
+       (def *section-name* ~name)
        (prn "ℹ️ Testing `" ~name "`\n")
-       ~@tests
+       (test ~@tests)
        (if *tests-have-failed*
          (prn "❌ Tests completed with some failures. \n")
          (prn "✅ Tests completed without failures. \n"))))
 
   (defmacro time [& forms]
-    `(do (def t (instant))
+    `(do (def t (date))
          ~@forms
-         (- (instant) t)))
+         (- (date) t)))
 
   (defmacro pmt [& forms]
     `(print (measure-time ~@forms)))
 
-  ;; (print (comment (print "hello")))
+  ;; (pme ((complement =) 1 1))
 
-  ;; (print (is-macro pmt))
-)
+  (comment "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."))

@@ -1,4 +1,5 @@
 import os
+import sexprs_reader_printer
 
 def reverse(lst):
     return [ele for ele in reversed(lst)]
@@ -38,8 +39,15 @@ def read_files_form_by_form(reader, procedure, files):
                 e = readerObj.read_form()
                 procedure(e)
 
+def read_string_eager(string, reader = sexprs_reader_printer):
+    ast_list = []
+    readerObj = reader.SexpReader(string)
+    while readerObj.position < len(readerObj.tokens):
+        e = readerObj.read_form()
+        ast_list.append(e)
+
 def read_string_form_by_form(reader, procedure, string):
-    """Similar to read_string_form_by_form, useful for the REPL."""
+    """Similar to read_files_form_by_form, useful for the REPL."""
     readerObj = reader.SexpReader(string)
     while readerObj.position < len(readerObj.tokens):
         e = readerObj.read_form()
@@ -75,3 +83,29 @@ def find_ns(name, ast_list):
 
 def get_base_namespace(reader):
     return read_files(reader, ['libraries/base.sb'])
+
+#== Exec except that it returns the value ==#
+# Taken from https://stackoverflow.com/questions/33409207/how-to-return-value-from-exec-in-function
+
+import ast
+import copy
+def convertExpr2Expression(Expr):
+        Expr.lineno = 0
+        Expr.col_offset = 0
+        result = ast.Expression(Expr.value, lineno=0, col_offset = 0)
+
+        return result
+def exec_with_return(code):
+    code_ast = ast.parse(code)
+
+    init_ast = copy.deepcopy(code_ast)
+    init_ast.body = code_ast.body[:-1]
+
+    last_ast = copy.deepcopy(code_ast)
+    last_ast.body = code_ast.body[-1:]
+
+    exec(compile(init_ast, "<ast>", "exec"), globals())
+    if type(last_ast.body[0]) == ast.Expr:
+        return eval(compile(convertExpr2Expression(last_ast.body[0]), "<ast>", "eval"),globals())
+    else:
+        exec(compile(last_ast, "<ast>", "exec"),globals())

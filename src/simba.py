@@ -1,19 +1,19 @@
 #! python3
 import sys, traceback
-from prompt_toolkit.filters.base import Filter
+from types import ModuleType
+from typing import Tuple, Union
 
 from prompt_toolkit.shortcuts.prompt import PromptSession
 from prompt_toolkit.history import FileHistory
 
 sys.path.insert(0, '.')
+
 # import antlr4
 import sexprs_reader_printer
 import dotexprs_reader_printer
-from simbaTypes import *
-import importlib
+from simba_types import *
+from simba_exceptions import MultipleDispatchException
 import helpers
-import timeit
-import functools
 
 # command-line
 import argparse
@@ -30,21 +30,27 @@ def read_sexp(string, syntax = default_syntax): # returns a SymbolicExpression
     return syntax.read_str(string)
 
 class Function:
-    """Functions are anonymous, but optionally named."""
-    def __init__(self, params, ast, bindings, loaded_ns, r_args = {}): # r_args = {}
+    """This should probably be renamed to Method. Functions are anonymous."""
+    def __init__(self, params, ast, bindings, loaded_ns, r_args = {}):
         # if len(params) < 1 or params[0] != Symbol('vector'): raise SyntaxError("Function declaration was expecting a vector as the first argument.")
-        self.name = r_args['name'] if 'name' in r_args else None
+        # if r_args: print(r_args)
+        # positonalParams = pass
+        # namedParams = pass
         self.args = params
-        self.ast  = ast
+        self.ast = ast
+        self.guard = None if 'guard' not in r_args else r_args['guard']
         self.bindings = bindings # the bindings should hold the bindings from the args and closure
         self.loaded_ns = loaded_ns
         self.macro = r_args['macro'] if 'macro' in r_args else False
-        if 'meta' in r_args: self.meta = r_args['meta']
-        for k in ['macro', 'meta', 'name']:
+        if 'meta' in r_args:
+            self.meta = r_args['meta']
+        else:
+            self.meta = {}
+        for k in ['macro', 'meta']:
             if k in r_args: r_args.pop(k)
-        if r_args: self.meta = r_args
-
-    # def add_named_args(self, names):
+        self.meta = self.meta | r_args
+    def register(self, fn):
+        return Multi(self, **self.meta, macro = self.macro).register(fn) # add meta
     def __call__(self, *e_p_args, **e_r_args):
         # a fn should have no dynamically bound symbols in it.
         # Its environment consists in the args + enclosed free variables at the time of creation
@@ -55,7 +61,6 @@ class Function:
                 break
             else:
                 names[arg.name] = e_p_args[i]
-
         res =  None
         env = SimbaEnvironment(
                 outer=self.bindings,
@@ -65,6 +70,50 @@ class Function:
             # evaluate in an implicit do #
             res = ns_eval_sexp(e, env = env, loaded_namespaces=self.loaded_ns)
         return res
+
+def check_guard(guard:Union[Function,None], p_args:tuple, r_args:dict):
+    if guard:
+        return guard(*p_args, **r_args)
+    else:
+        return True
+
+def signature_match(signature:tuple, p_args:tuple, r_args:dict, guard: Union[Function,None] = None) -> bool:
+    if Symbol('&') in signature:
+        return check_guard(guard, p_args, r_args) and True
+    else:
+        # TODO: for now the signature length does not take into account the keyword arguments or type signatures
+        return len(p_args) == len(signature) and check_guard(guard, p_args, r_args)
+
+class Multi:
+    """All functions are in fact multimethods by default.
+    """
+    def __init__(self, fn:Function, **meta):
+        self.method_table: List[Tuple[Tuple, Function, Union[Function, None]]] = []
+        self.meta = meta
+        if 'macro' in self.meta:
+            self.macro = self.meta['macro']
+            self.meta.pop('macro')
+        else: 
+            self.macro = False
+        self.register(fn)
+    def register(self, fn: Function):
+        self.method_table.append((fn.args, fn, fn.guard))
+        return self
+    def clear(self):
+        self.method_table = []
+    def signatures(self):
+        r = []
+        for t in self.method_table:
+            r.append((t[0], t[2]))
+        return r
+    def __len__(self):
+        return len(self.method_table)
+    def __call__(self, *p_args, **r_args):
+        for tup in self.method_table:
+            if signature_match(tup[0], p_args, r_args, guard = tup[2]):
+                return tup[1](*p_args, **r_args)
+        n = self.meta['name'] if 'name' in self.meta else ""
+        raise MultipleDispatchException(f"No matching signature for multimethod {n}")
 
 def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
     return syntax.to_string(sexp, lb=lb)
@@ -165,10 +214,21 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
     """
     # macroexpansion step
     sexp = macroexpand(sexp, env)
-    if (isinstance(sexp, Symbol)): # if symbol evaluate to its binding
+    if isinstance(sexp, Symbol): # if symbol evaluate to its binding
+        # here if symbol is qualified with module name return (get-attr "f" module)
+        if sexp.namespace:
+            if sexp.namespace == "py":
+                return eval(sexp.name)
+            resolution = env.get(Symbol(sexp.namespace))
+            if isinstance(resolution , ModuleType):
+                return getattr(resolution, sexp.name)
         try: return env.get(sexp)
         except KeyError: raise UnresolvedSymbolError(sexp)
-    if (isinstance(sexp, SymbolicExpression)): # apply the symbolic expression
+    if isinstance(sexp, Vector):
+        return [ns_eval_sexp(e, env, loaded_namespaces) for e in sexp]
+    if isinstance(sexp, Map):
+        return {ns_eval_sexp(key, env, loaded_namespaces): ns_eval_sexp(sexp[key], env, loaded_namespaces) for key in sexp}
+    if isinstance(sexp, SymbolicExpression): # apply the symbolic expression
         if len(sexp.positional) == 0:
             return None
         ## Special Forms: ##
@@ -177,10 +237,12 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
         # if isinstance(head, Symbol):
         if isinstance(head, SymbolicExpression):
             evaledPArgs = [ns_eval_sexp(e, env, loaded_namespaces) for e in sexp.positional]
-            evaledRArgs = {ns_eval_sexp(key, env, loaded_namespaces): ns_eval_sexp(value, env, loaded_namespaces) for key, value in sexp.relational}
+            evaledRArgs = {ns_eval_sexp(key, env, loaded_namespaces): ns_eval_sexp(sexp.relational[key], env, loaded_namespaces) for key in sexp.relational}
             return evaledPArgs[0](*evaledPArgs[1:], **evaledRArgs)
         if "def" == head.name:
             ## def adds a binding (from unevaluated first arg to evaled second arg) in the environment ##
+            if len(sexp.positional) < 3 and not isinstance(sexp.positional[1], Vector):
+                raise SyntaxError("`def` statement has invalid argument pattern")
             a1 = sexp.positional[1]
             if isinstance(a1, list):
                 for name, value in zip(a1[0::2], a1[1::2]):
@@ -195,10 +257,9 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
             if len(sexp.positional) != 2: raise Exception("quote expected 1 argument")
             return sexp.positional[1]
         elif "if" == head.name:
-            ## If may need some more work: what is truthy? what if fewer than 3 args? ##
-            if (len(sexp.positional) < 3):
+            if len(sexp.positional) < 3:
                 raise SyntaxError("Too few arguments to if")
-            if (len(sexp.positional) > 4):
+            if len(sexp.positional) > 4:
                 raise SyntaxError("Too many arguments to if")
             cond, then = sexp.positional[1:3]
             evaled_cond = ns_eval_sexp(cond, env, loaded_namespaces)
@@ -210,28 +271,41 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
                     return ns_eval_sexp(_else, env, loaded_namespaces)
                 else: return None
         elif "fn" == head.name:
-            ## Anonymous function ##
-            ## returns a new closure ##
-            argVector, body = sexp.positional[1], sexp.positional[2:]
-            # what the closure should do is:
-            # - gather all the free variables
-            # - point to the local bindings in `bindings`
-            bindings = env # this is temporary: 
-            # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
-            # in the future, the bindings will be only the ones references in the closure
-            return Function(argVector, body, bindings, loaded_namespaces, sexp.relational)
-        # elif "macro" == head.name:
-        #     """In the end this should be replaced by a... macro"""
-        #     ## Anonymous function ##
-        #     ## returns a new closure ##
-        #     argVector, body = sexp.positional[1], sexp.positional[2:]
-        #     # what the closure should do is:
-        #     # - gather all the free variables
-        #     # - point to the local bindings in `bindings`
-        #     bindings = env # this is temporary: 
-        #     # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
-        #     # in the future, the bindings will be only the ones references in the closure
-        #     return Function(argVector, body, bindings, loaded_namespaces, sexp.relational)
+            arg1 = sexp.positional[1]
+            if isinstance(arg1, Vector):
+                # anonymous function (single method declaration)
+                argVector, body = sexp.positional[1], sexp.positional[2:]
+                # what the closure should do is:
+                # - gather all the free variables
+                # - point to the local bindings in `bindings`
+                bindings = env # this is temporary:
+                # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
+                # in the future, the bindings will be only the ones references in the closure
+                return Function(argVector, body, bindings, loaded_namespaces, sexp.relational)
+            elif isinstance(arg1, SymbolicExpression):
+                # anonymous multimethod (with multiple method declarations)
+                fn = Function(sexp[1][0], sexp[1][1:], env, loaded_namespaces, sexp.relational)
+                for exp in sexp[2:]:
+                    # argVector, body = exp.positional[0], exp.positional[1:]
+                    fn = fn.register(Function(exp.positional[0], exp.positional[1:], env, loaded_namespaces, sexp.relational))
+                return fn
+        # elif "for" == head.name:
+        #     res = None
+        #     for 
+        # elif "while" == head.name:
+        #     cond = sexp.positional[1]
+        #     body = cond.positional[2:]
+        #     while ns_eval_sexp(cond, env, loaded_namespaces):
+        #         ns_eval_sexp(body, env, ns_eval_sexp)
+        # elif "loop" == head.name:
+        #     # ensure recur is at tail position
+        #     bindings = sexp[1] # hopefully the first argument is a vector
+        #     # ensure that the recur happens at the tails of the expr
+        #     contents = sexp[2:]
+        #     # val = 
+        #     while true:
+        #         # when you encounter recur, call next
+        #         # at the end, call break
         elif "let" == head.name:
             # I should remove the let
             ## creates a new environment and binds the values to it successively (in order) ##
@@ -293,7 +367,7 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
                 # creates a new environment for the new namespace
                 ns_env = SimbaEnvironment(names = repl_env)
                 # evaluates the content of that namespace in the new environment
-                ns_eval_sexp(helpers.find_ns(ns_name, ast), ns_env, loaded_namespaces)
+                ns_eval_sexp(helpers.find_ns(ns_name, program_ast), ns_env, loaded_namespaces)
                 # add the new namespace environment to the list of loaded namespaces
                 loaded_namespaces[ns_name] = ns_env
                 # add the environment to the list of contextual namespaces
@@ -306,7 +380,7 @@ def ns_eval_sexp(sexp, env, loaded_namespaces = {}):
                 # creates a new environment for the new namespace
                 ns_env = SimbaEnvironment(names = repl_env)
                 # evaluates the content of that namespace in the new environment
-                ns_eval_sexp(helpers.find_ns(ns_name, ast), ns_env, loaded_namespaces)
+                ns_eval_sexp(helpers.find_ns(ns_name, program_ast), ns_env, loaded_namespaces)
                 # add the new namespace environment to the list of loaded namespaces
                 loaded_namespaces[ns_name] = ns_env
                 # add the environment to the list of contextual namespaces
@@ -365,6 +439,6 @@ elif __name__ == "__main__" and len(sys.argv) > 1:
 
     # if not (args.files.contains('libraries') or args.files.contains('libraries/base.sb')):
     #     args.files = args.files + ['libraries/base.sb']
-    ast = helpers.read_files(_reader, args.files) # + helpers.read_files(_reader, ['standard'])
+    program_ast = helpers.read_files(_reader, args.files) # + helpers.read_files(_reader, ['standard'])
     # print(print_sexp(ast))
-    res = namespaced_eval(ast, args.run_tests, args.main)
+    res = namespaced_eval(program_ast, args.run_tests, args.main)

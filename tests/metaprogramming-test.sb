@@ -1,51 +1,81 @@
 (ns metaprogramming-test
-  ;; (include test)
+  (include base)
 
-  ;; (st "metaprogramming"
+  ;; (print (is-macro (fn []
+  ;;                    :macro true
+  ;;                    '(* 1 2))))
 
+  ;; (print {1 1
+  ;;         "meta" 'this
+  ;;         '(sexp object) 6.3})
+  ;; (print {:one 1
+  ;;         :meta 'this
+  ;;         :code '(sexp object)})
 
-  ;;   ;; (test/t "Quote"
-  ;;   ;;     (quote ()) '()
-  ;;   ;; )
+  ;; (print {"first" 1
+  ;;         "second" 2
+  ;;         "third" 3})
 
-  ;;     (t "Quasiquote"
-  ;;        `(some-fn ~(* 2 3) 4) '(some-fn 6 4))
+  ;; (def defn
+  ;;   (fn [name args & body]
+  ;;     :macro true
+  ;;     :younameit "someother"
+  ;;     :name "hello"
+  ;;     :other 1
+  ;;     :meta  {}
+  ;;     `(def ~name (fn ~args
+  ;;                   :macro true
+  ;;                   ~@body))))
 
-  ;;     ;; (t "Apply"
-  ;;     ;;   ;;  (apply + [1 2 3]) (+ 1 2 3)
-  ;;     ;;    ;; (apply - [(first [0 1]) (first (rest [0 2]))] (- 0 2))
-  ;;     ;;    )
+  ;; (print (get-attr "meta" defn))
 
-  ;;     (pme (apply * [2 3 4]))
+  ;; (print (macroexpand
+  ;;         (defn my-func []
+  ;;           (* 3 3))))
 
-  ;;     ;;
-  ;;     )
-  ;;
+  ;; (defn my-func []
+  ;;   (* 3 3))
 
-  (print (is-macro (fn []
-                     :macro true
-                     '(* 1 2))))
+  (import ast)
 
-  (def defn
-    (fn [name args & body]
-      :macro true
-      `(def ~name (fn ~args
-                    :macro true
-                    ~@body))))
+  ;; (print ast)
 
-  (print (macroexpand 
-          (defn my-func []
-            (* 3 3))))
+  ;; (prn (type ast))
+
+  ;; (print (dir (py-eval "ast")))
+
+;;   (comment (py-exec
+;;             "import ast
+;; print(ast.dump(ast.parse('from y import x,y,z'), indent=4))"))
+  (prn (ast/dump
+        :indent 4
+        (ast/parse "from y import x, y, z")))
+
+  (prn (ast/dump
+        :indent 4
+        (ast/parse
+         "if cond:
+    then_clause
+else:
+  else_clause")))
+
+  ;; (protocol sexp
+  ;;   head
+  ;;   positional
+  ;;   relational)
+
+  ;; (defn analyze [ast]
+  ;;   :doc "Simba semantic analysis."
+  ;;   ast)
+
+  ;; (defn emit [simba-ast] ;> ::ast
+  ;;   :doc "Simba 'bytecode' emitter to Python ast."
+  ;;   nil)
+
+  (print (py/abs -3))
+
+  ;; (import base_functions)
+
+  (print (py/base_functions.sb_add 3 4))
   
-  (defn my-func []
-    (* 3 3))
-  
-  (print (my-func))
-
-  ;; (print [1 2 :number 3])
-
-  ;; (print (prepend-sexp '(hello this :something val) '(:something value)))
-
-  ;; (print '(:value)) ;-> should and does throw an error
-  ;; (print `(:hello my))
   )

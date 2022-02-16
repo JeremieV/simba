@@ -6,9 +6,13 @@ import functools as ft
 import itertools as it
 import operator as op
 from math import prod
+from types import LambdaType, MethodType
 import helpers
-from simbaTypes import SymbolicExpression
+from simba_types import SymbolicExpression, Symbol
 import time
+from inspect import ismethod
+
+from src.simba_exceptions import SimbaException
 
 def sb_add(x, y):
     if x is None:
@@ -17,25 +21,13 @@ def sb_add(x, y):
         return None
     return x + y
 
+def sb_print(e):
+    from simba import print_sexp
+    print(print_sexp(e))
+
 def sb_append(e, coll):
     coll.append(e)
     return coll
-
-def interop(callable, *args, **kwargs):
-    return callable(*args, **kwargs)
-
-# you need ways to: get attrs, call methods, index accurately, __instantiate classes__
-def get_attribute(obj, attr):
-    return obj.attr # getattr
-
-def call_method(obj, method, *args, **kwargs):
-    return obj.method(*args, **kwargs)
-
-# def sb_prepend_sexp(e, sexp:SymbolicExpression):
-#     if sexp is None:
-#         return SymbolicExpression(e)
-#     sexp.positional = [e] + sexp.positional
-#     return sexp
 
 def sb_prepend_sexp(e, seq):
     """Defines a generic prepend function that should work on all sequence types.
@@ -69,12 +61,31 @@ def sb_generic_concat(a, b):
     elif isinstance(a, SymbolicExpression):
         return a + SymbolicExpression(*b)
 
+def sb_uniform_access(*attrs):
+    """This implements the Uniform Access Principle.
+    Coined in Object-Oriented Software Construction by Bertrand Meyer:
+    'All services offered by a module should be available through a uniform notation, which does not betray whether they are implemented through storage or through computation.'
+    - https://en.wikipedia.org/wiki/Uniform_access_principle
+    - http://wiki.c2.com/?UniformAccessPrinciple"""
+    obj = attrs[-1]
+    attr = attrs[0]
+    if isinstance(attr, Symbol):
+        attr = attr.name
+    args = attrs[1:-1]
+    if hasattr(obj, attr):
+        a = getattr(obj, attr)
+        if callable(a) and not isinstance(a, LambdaType):
+            return eval(f"obj.{attr}")(*args)
+        else:
+            return a
+    raise SimbaException(f"{obj} has no attribute {attr}")
+
 def throw(e): raise e
 
+# define operators that are infix in Python
 repl_env = {
     # predicates
-    'is': lambda a, b: a is b,
-    'is-instance': isinstance, # can't work for now
+    'is-instance': isinstance, # maybe I should switch the order of arguments
     'is-macro': lambda obj: True if obj.macro else False, # need the environment as a param
 
     # arithmetic
@@ -83,8 +94,20 @@ repl_env = {
     '*': lambda *a: prod(a),
     '/': lambda a, *b: a / prod(b),
     '%': lambda a, b: b % a,
+    'pow': lambda a, b: a ** b,
+    'floordiv': lambda a, b: a // b,
+
+    # comparison
     '=': lambda a, b: a == b,
-    # comparison such as ≤
+    '!=': lambda a, b: a != b,
+    '>': lambda a, b: a > b,
+    '<': lambda a, b: a < b,
+    '<=': lambda a, b: a <= b,
+    '>=': lambda a, b: a >= b,
+
+    # identity
+    'is': lambda a, b: a is b,
+    'is-not': lambda a, b: a is not b,
 
     # logic
     'not': lambda a: not a,
@@ -93,21 +116,51 @@ repl_env = {
     # 'nand':
     # 'xor':
 
-    # data structure creation
-    'sexp': lambda *a, **ka: SymbolicExpression(*a, **ka),
-    'vector': lambda *a: [*a],
-    'tuple': lambda *a: a,
-    'hash-map': lambda *a: {key: val for key, val in zip(a, a)},
+    # membership
+    'in': lambda a, b: a in b,
+    'not-in': lambda a, b: a not in b,
+
+    # bitwise
+    '&': lambda a, b: a & b,
+    '|': lambda a, b: a | b,
+    '^': lambda a, b: a ^ b,
+    '~': lambda a: ~a,
+    '<<': lambda a, b: a << b,
+    '>>': lambda a, b: a >> b,
+
+    # types
+    'sexp': SymbolicExpression,
+    'symbol': Symbol,
+    'vector': list,
+    'tuple': tuple,
+    'hash-map': dict, # lambda *a: {key: val for key, val in zip(a, a)},
+    'set': set,
+    'exception': Exception,
+    'type': type,
+    'str': str,
+
+    # magic or dunder methods: https://rszalski.github.io/magicmethods/
+    'new': lambda obj, *args, **kwargs: obj(*args, **kwargs),
+    'del': lambda obj: obj.__del__(),
+    'at': lambda i, obj: obj[i], # 'get-item'
+    'set-at': lambda i, new, obj: obj.__setitem__(i, new),
+    'del-at': lambda i, obj: obj.__delitem__(i),
+    # I would like to have
+    # - special syntax for get, set, del
+    # - universal access principle, such that if attr doesn't exist, then tries to call method
+    'get-attr': sb_uniform_access, # lambda attr, obj: obj.__getattribute__(attr),
+    'set-attr': lambda attr, value, obj: obj.__delattr__(attr, value),
+    'del-attr': lambda attr, obj: obj.__delattr__(attr),
 
     # sequences
     'count': len,
-    'slice': lambda low, up = None, seq = None: seq[low:up] if seq is not None else up[low:],
-    'nth': lambda i, obj: obj[i],
+    'between': lambda low, up = None, seq = None: seq[low:up] if seq is not None else up[low:],
     'prepend-sexp': sb_prepend_sexp,
-    'prepend': lambda e, coll: [e] + coll,
+    'prepend': lambda *es: list(es[:-1] + tuple(es[-1])),
     'append': sb_append,
     'concat': sb_generic_concat, # lambda *lists: ft.reduce(op.add, lists), # this poses certain problems bc its the add operation
     'reverse': helpers.reverse,
+    'range': range,
 
     # collections
 
@@ -115,22 +168,11 @@ repl_env = {
     'print': (lambda *args: [sb_print(e) for e in args][0]),
     'prn': (lambda *args: [print(e, end = "") for e in args][0]),
     'throw': throw,
-    # 'import': lambda module: importlib.import_module(module)
     # 'time': timeit.timeit
 
     # reflection
     # interop
-    'get': getattr,
-    'type': type,
-    'locals': locals,
-    'globals': globals,
-    'instant': time.time,
-    'exception': lambda e: Exception(e),
-    'py-compile': compile,
-    'py-eval': eval,
-    'py-exec': lambda e: exec(compile(e, '', 'single')),
+    'get': lambda e, obj: obj[e],
+    'date': time.time,
+    'py-exec': helpers.exec_with_return,
 }
-
-def sb_print(e):
-    from simba import print_sexp
-    print(print_sexp(e))

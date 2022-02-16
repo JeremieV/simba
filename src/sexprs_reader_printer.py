@@ -1,6 +1,5 @@
 import re
-from simbaTypes import (Symbol, Vector, Map, SymbolicExpression, Keyword)
-from simbaTypes import *
+from simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword)
 
 class Blank(Exception): pass
 
@@ -48,13 +47,13 @@ def read_atom(reader):
     elif re.match(string_re, token):return _unescape(token[1:-1])
     elif token[0] == '"':           raise Exception("expected '\"', got EOF")
     elif token[0] == ':':           return Keyword(token[1:])
+    elif token[0] == '.':           return token[1:]
     elif token == "nil":            return None
     elif token == "true":           return True
     elif token == "false":          return False
     else:                           return Symbol(token) # here returns symbol
 
-def read_sequence(reader, typ=list, start='(', end=')'):
-    # ast = typ()
+def read_sequence(reader, start='(', end=')'):
     token = reader.next()
     if token != start: raise Exception("expected '" + start + "'")
 
@@ -62,21 +61,32 @@ def read_sequence(reader, typ=list, start='(', end=')'):
     token = reader.peek()
     while token != end:
         if not token: raise Exception("expected '" + end + "', got EOF")
+        if token[0] == '.':
+            # in the midst of this if clause
+            arguments.append(Symbol('get-attr'))
+            arguments.append(read_form(reader))
         arguments.append(read_form(reader))
         token = reader.peek()
     reader.next()
     # print(arguments)
-    return typ(*arguments) if typ == SymbolicExpression else arguments
+    return arguments
 
 def readMap(reader):
-    lst = read_sequence(reader, list, '{', '}')
-    return dict(*lst)
+    lst = read_sequence(reader, '{', '}')
+    m = {}
+    for name, value in zip(lst[0::2], lst[1::2]):
+        if isinstance(value, Keyword):
+            raise Exception("A map can only have keywords as keys.")
+        if isinstance(name, Keyword):
+            name = str(name)
+        m[name] = value
+    return m
 
 def readSymbolicExpression(reader):
-    return read_sequence(reader, SymbolicExpression, '(', ')')
+    return SymbolicExpression(*read_sequence(reader, '(', ')'))
 
 def readVector(reader):
-    return read_sequence(reader, Vector, '[', ']')
+    return Vector(read_sequence(reader, '[', ']'))
 
 def read_form(reader):
     "Reads a single Simba form. Raises an exception for unmatched parens."
@@ -104,12 +114,6 @@ def read_form(reader):
     elif token == '@':
         reader.next()
         return SymbolicExpression(Symbol('deref'), read_form(reader))
-    # elif token[0] == ':':
-    #     _tok = token[1:]
-    #     reader.next()
-    #     f = read_form(reader)
-    #     # named_arguments[-1][_tok] = f
-    #     return AstIgnore()
     # list
     elif token == ')': raise Exception("unexpected ')'")
     elif token == '(': return readSymbolicExpression(reader)
@@ -147,10 +151,7 @@ def to_string(obj, indent=0, lb=True) -> str:
     elif type(obj) == Vector:
         return "[" + " ".join(to_string(e) for e in obj) + "]"
     elif type(obj) == Map:
-        ret = []
-        for k in obj.keys():
-            ret.extend((to_string(k), to_string(obj[k])))
-        return "{" + " ".join(ret) + "}"
+        return "{" + " ".join(to_string(k, indent=indent, lb=lb) + " " + to_string(obj[k], indent=indent, lb=lb) + "\n" for k in obj) + "}"
     elif type(obj) == Keyword:
         return start + " "*indent + ':' + str(obj)
     elif type(obj) == str:

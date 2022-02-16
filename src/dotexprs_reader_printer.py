@@ -1,4 +1,4 @@
-from simbaTypes import *
+from simba_types import *
 # from antlr4.tree.Tree import ParseTreeWalker
 # import dot_expr_grammar as grammar # imports simbaLexer, simbaParser
 # from src.dot_expr_grammar.simbaLexer import simbaLexer
