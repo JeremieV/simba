@@ -123,3 +123,21 @@
 #         e = readerObj.read_form()
 #         result = eval_sexp(e, exec_environment)
 #     return result
+
+# elif "for" == head.name:
+#     res = None
+#     for 
+# elif "while" == head.name:
+#     cond = sexp.positional[1]
+#     body = cond.positional[2:]
+#     while ns_eval_sexp(cond, env, loaded_namespaces):
+#         ns_eval_sexp(body, env, ns_eval_sexp)
+# elif "loop" == head.name:
+#     # ensure recur is at tail position
+#     bindings = sexp[1] # hopefully the first argument is a vector
+#     # ensure that the recur happens at the tails of the expr
+#     contents = sexp[2:]
+#     # val = 
+#     while true:
+#         # when you encounter recur, call next
+#         # at the end, call break

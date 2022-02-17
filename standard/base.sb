@@ -24,12 +24,6 @@
       `(def ~name
          (fn ~args :macro true ~@expr))))
 
-  (defmacro do [& expressions]
-    ;; evaluates the expressions in order in a new lexical environment, like a function call without arguments
-    ;; do was first a special form, and now it's a macro to simplify the language, and add a level of scope to the `do`
-    `((fn []
-        ~@expressions)))
-
   ;; (defmacro let [bindings & forms]
   ;;   `(fn []))
 
@@ -81,7 +75,7 @@
     `(if (is-assigned ~name)
        (.register (fn ~args ~@body) ~name)
        (def ~name (py/Multi (fn ~args ~@body)))))
-  
+
   (defn mymulti [a]
     (+ a 10))
 
@@ -290,6 +284,12 @@
   (defmacro pmt [& forms]
     `(print (measure-time ~@forms)))
 
-  ;; (pme ((complement =) 1 1))
+  (comment "Various comments about the base library."
+    
+    "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."
 
-  (comment "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."))
+    (defmacro do [& expressions]
+      :doc "Serves as an example to show that `do` is easily defined in terms of only function application.
+          However for practical purposes `do` is included as a special form in the interpeter."
+      `((fn []
+          ~@expressions)))))

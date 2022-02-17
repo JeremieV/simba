@@ -1,81 +1,86 @@
-(ns metaprogramming-test
-  (include base)
+;; (ns metaprogramming-test
+;;   (include base)
 
-  ;; (print (is-macro (fn []
-  ;;                    :macro true
-  ;;                    '(* 1 2))))
+;;   ;; (print (is-macro (fn []
+;;   ;;                    :macro true
+;;   ;;                    '(* 1 2))))
 
-  ;; (print {1 1
-  ;;         "meta" 'this
-  ;;         '(sexp object) 6.3})
-  ;; (print {:one 1
-  ;;         :meta 'this
-  ;;         :code '(sexp object)})
+;;   ;; (print {1 1
+;;   ;;         "meta" 'this
+;;   ;;         '(sexp object) 6.3})
+;;   ;; (print {:one 1
+;;   ;;         :meta 'this
+;;   ;;         :code '(sexp object)})
 
-  ;; (print {"first" 1
-  ;;         "second" 2
-  ;;         "third" 3})
+;;   ;; (print {"first" 1
+;;   ;;         "second" 2
+;;   ;;         "third" 3})
 
-  ;; (def defn
-  ;;   (fn [name args & body]
-  ;;     :macro true
-  ;;     :younameit "someother"
-  ;;     :name "hello"
-  ;;     :other 1
-  ;;     :meta  {}
-  ;;     `(def ~name (fn ~args
-  ;;                   :macro true
-  ;;                   ~@body))))
+;;   ;; (def defn
+;;   ;;   (fn [name args & body]
+;;   ;;     :macro true
+;;   ;;     :younameit "someother"
+;;   ;;     :name "hello"
+;;   ;;     :other 1
+;;   ;;     :meta  {}
+;;   ;;     `(def ~name (fn ~args
+;;   ;;                   :macro true
+;;   ;;                   ~@body))))
 
-  ;; (print (get-attr "meta" defn))
+;;   ;; (print (get-attr "meta" defn))
 
-  ;; (print (macroexpand
-  ;;         (defn my-func []
-  ;;           (* 3 3))))
+;;   ;; (print (macroexpand
+;;   ;;         (defn my-func []
+;;   ;;           (* 3 3))))
 
-  ;; (defn my-func []
-  ;;   (* 3 3))
+;;   ;; (defn my-func []
+;;   ;;   (* 3 3))
 
-  (import ast)
+;;   (import ast)
 
-  ;; (print ast)
+;;   ;; (print ast)
 
-  ;; (prn (type ast))
+;;   ;; (prn (type ast))
 
-  ;; (print (dir (py-eval "ast")))
+;;   ;; (print (dir (py-eval "ast")))
 
-;;   (comment (py-exec
-;;             "import ast
-;; print(ast.dump(ast.parse('from y import x,y,z'), indent=4))"))
-  (prn (ast/dump
-        :indent 4
-        (ast/parse "from y import x, y, z")))
+;; ;;   (comment (py-exec
+;; ;;             "import ast
+;; ;; print(ast.dump(ast.parse('from y import x,y,z'), indent=4))"))
+;;   (prn (ast/dump
+;;         :indent 4
+;;         (ast/parse "from y import x, y, z")))
 
-  (prn (ast/dump
-        :indent 4
-        (ast/parse
-         "if cond:
-    then_clause
-else:
-  else_clause")))
+;;   (prn (ast/dump
+;;         :indent 4
+;;         (ast/parse
+;;          "if cond:
+;;     then_clause
+;; else:
+;;   else_clause")))
 
-  ;; (protocol sexp
-  ;;   head
-  ;;   positional
-  ;;   relational)
+;;   ;; (protocol sexp
+;;   ;;   head
+;;   ;;   positional
+;;   ;;   relational)
 
-  ;; (defn analyze [ast]
-  ;;   :doc "Simba semantic analysis."
-  ;;   ast)
+;;   ;; (defn analyze [ast]
+;;   ;;   :doc "Simba semantic analysis."
+;;   ;;   ast)
 
-  ;; (defn emit [simba-ast] ;> ::ast
-  ;;   :doc "Simba 'bytecode' emitter to Python ast."
-  ;;   nil)
+;;   ;; (defn emit [simba-ast] ;> ::ast
+;;   ;;   :doc "Simba 'bytecode' emitter to Python ast."
+;;   ;;   nil)
 
-  (print (py/abs -3))
+;;   (print (py/abs -3))
 
-  ;; (import base_functions)
+;;   ;; (import base_functions)
 
-  (print (py/base_functions.sb_add 3 4))
+;;   (print (py/base_functions.sb_add 3 4))
   
+;;   )
+
+(ns main
+
+  (print (if false true))
   )

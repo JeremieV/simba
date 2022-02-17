@@ -10,19 +10,18 @@
     "if"
     (if true nil) nil
     (if false true false) false
-    (cond
-      false "yes"
-      false "no"
-      true "default") "default"
-    (cond
-      false "yes"
-      true "no"
-      true "default") "no"
+    ;; (cond
+    ;;   false "yes"
+    ;;   false "no"
+    ;;   true "default") "default"
+    ;; (cond
+    ;;   false "yes"
+    ;;   true "no"
+    ;;   true "default") "no"
     ;; (if something :then
     ;;     (do this)
     ;;  :else
     ;;     (do that))
-
 
     "def"
     (try
@@ -72,6 +71,15 @@
          :catch "error") "error"
     (h 1 2) 2
     (h 0 0 0) 3
+
+    ;; (defn my-identity-multi
+    ;;   ([] nil)
+    ;;   ([one] one)
+    ;;   ([one two] [one two])) nil
+
+    ;; (my-identity-multi) nil
+    ;; (my-identity-multi 33) 33
+    ;; (my-identity-multi 'two-args (+ 1 2)) ['two-args 3]
 
     "equality"
     (= 1 1) true
