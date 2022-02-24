@@ -41,11 +41,21 @@
     (do
       (def [e 10 f 30])
       (+ e f)) 40
-    (do (def [g (+ 50 (* 34 70))
-              h (- g 430)])
-        (append h (append g []))) [2430 2000]
+    ;; (do (def [g (+ 50 (* 34 70))
+    ;;           h (- g 430)])
+    ;;     (py/toolz.cons h (py/toolz.cons g []))) [2430 2000]
       ;; TODO add cases that should throw errors
 
+    "let"
+    (let [a 30
+          b 60]
+      (+ a b)) 90
+    
+    (let [a 1
+          b 2]
+      (let [a 3]
+        ;; (def a 4)
+        (+ a b))) 5
 
     "closures"
       ;; calling an empty function - should return nil
@@ -146,11 +156,41 @@
   ;;
 
 
-;;   (tests "sequence functions"
-;;     (test "first"
-;;       (first '(1 2) 1)
-;;       (first [3 4] 3)
-;;       (first []) nil))
+  (tests "sequences"
+
+    "basic sequence fns"
+    (first '(1 2)) 1
+    (first [3 4]) 3
+    ;; (first []) nil
+
+    (rest [1 2 3]) [2 3]
+    (rest (t 1 2 3)) (t 2 3)
+    (rest []) []
+
+    (next [1 2 3]) [2 3]
+    (next []) nil
+    (nnext [1]) nil
+
+    (seq {"name" identity}) [(t "name" identity)]
+    (seq [1 2 3]) [1 2 3]
+
+    "map"
+    (map inc [1 2 3]) [2 3 4]
+    (map dec [1 2 3]) [0 1 2]
+
+    "filter"
+    (filter even? [1 2 3 4 5]) [2 4]
+    (filter odd? [1 2 3 4 5]) [1 3 5]
+    
+
+    )
+
+  (tests "threading macros"
+    
+    (-> 3
+        (inc)
+        (inc)) nil
+    )
 
 ;; BUG
 ;;   (defmacro m [arg]
@@ -252,13 +292,13 @@
     (py/eval "1 + 2") 3
 
     "calling methods on objects"
-    (do
-      (def a [])
-      (.append 3 a)
-      a) [3]
-    (do (def c [3 4 45 3 23 1])
-        (.sort c)
-        c) [1 3 3 4 23 45])
+    (.append 3 []) [3]
+    ;; (do (def c [3 4 45 3 23 1])
+    ;;     (.sort c)
+    ;;     c) [1 3 3 4 23 45]
+
+    ;; (py/dir [1 2 3]) {}
+    )
   
   (tests "metaprogramming"
 

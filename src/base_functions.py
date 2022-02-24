@@ -6,11 +6,16 @@ import functools as ft
 import itertools as it
 import operator as op
 from math import prod
-from types import LambdaType, MethodType
+from types import LambdaType
+
+import pyrsistent
+from simba_types import Map, Vector
 import helpers
 from simba_types import SymbolicExpression, Symbol
 import time
-from inspect import ismethod
+import toolz
+
+import collections.abc
 
 from src.simba_exceptions import SimbaException
 
@@ -25,9 +30,19 @@ def sb_print(e):
     from simba import print_sexp
     print(print_sexp(e))
 
-def sb_append(e, coll):
-    coll.append(e)
-    return coll
+def sb_seq(seqable):
+    """Returns an appropriate sequence representation of an object.
+    If the sequable is empty, return nil."""
+    if isinstance(seqable, collections.abc.Sequence):
+        if len(seqable) == 0:
+            return None
+        return seqable
+    elif isinstance(seqable, Map):
+        if len(s := seqable.items()) == 0:
+            return None
+        return s
+    elif seqable is None:
+        return None
 
 def sb_prepend_sexp(e, seq):
     """Defines a generic prepend function that should work on all sequence types.
@@ -85,8 +100,8 @@ def throw(e): raise e
 # define operators that are infix in Python
 repl_env = {
     # predicates
-    'is-instance': isinstance, # maybe I should switch the order of arguments
-    'is-macro': lambda obj: True if obj.macro else False, # need the environment as a param
+    'instance?': isinstance, # maybe I should switch the order of arguments
+    'macro?': lambda obj: True if obj.macro else False, # need the environment as a param
 
     # arithmetic
     '+': lambda *a: ft.reduce(sb_add, a),
@@ -131,9 +146,12 @@ repl_env = {
     # types
     'sexp': SymbolicExpression,
     'symbol': Symbol,
-    'vector': list,
+    'Vector': Vector,
+    'vector': pyrsistent.v,
     'tuple': tuple,
-    'hash-map': dict, # lambda *a: {key: val for key, val in zip(a, a)},
+    't': lambda *t: t,
+    'HashMap': Map,
+    'hash-map': pyrsistent.m,
     'set': set,
     'exception': Exception,
     'type': type,
@@ -153,11 +171,11 @@ repl_env = {
     'del-attr': lambda attr, obj: obj.__delattr__(attr),
 
     # sequences
-    'count': len,
+    'count': toolz.count,
     'between': lambda low, up = None, seq = None: seq[low:up] if seq is not None else up[low:],
     'prepend-sexp': sb_prepend_sexp,
     'prepend': lambda *es: list(es[:-1] + tuple(es[-1])),
-    'append': sb_append,
+    # 'append': sb_append,
     'concat': sb_generic_concat, # lambda *lists: ft.reduce(op.add, lists), # this poses certain problems bc its the add operation
     'reverse': helpers.reverse,
     'range': range,
@@ -168,7 +186,6 @@ repl_env = {
     'print': (lambda *args: [sb_print(e) for e in args][0]),
     'prn': (lambda *args: [print(e, end = "") for e in args][0]),
     'throw': throw,
-    # 'time': timeit.timeit
 
     # reflection
     # interop

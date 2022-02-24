@@ -5,6 +5,7 @@ Many data types are declared as aliases for the benefit of being able to call is
 from re import split
 import helpers
 from simba_exceptions import UnresolvedSymbolError
+import pyrsistent as p
 
 # Atomic Data Types
 class Symbol:
@@ -94,22 +95,12 @@ class SymbolicExpression():
 
 # Collection Data Types
 
-List = list
-Vector = list
-Map = dict
-
-class PersistentVector():
-    """This is a persistent vector"""
-
-class  PersistentMap():
-    """This is a persistent map"""
+List = p.PList
+Vector = p.PVector
+Map = p.PMap
 
 class Protocol():
     """This is the protocol type"""
-
-# a = SymbolicExpression(1, 2, 3, a=3, b=6)
-# a.append()
-# print(a.positional, a.relational)
 
 # =====================
 #       INTERNAL
@@ -123,6 +114,9 @@ class SimbaEnvironment():
         self.names = names
         self.namespaces = namespaces
         self.referred = referred
+    #     self.immutable = False
+    # def make_immutable(self):
+    #     self.immutable = True
     def set(self, symbol, value):
         """Change or add a binding. The binding has to be in the local namespace."""
         # there is a bug here: what if the current namespace is qualified! we could just add the current ns as param to __init__

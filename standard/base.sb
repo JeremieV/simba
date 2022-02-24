@@ -11,18 +11,28 @@
     ;; notes on multiple dispatch: the multiple dispatch mechanism should be like the one
     ;; in Julia, with dispatch based on arity, type, and the option for optional and keyword arguments,
     ;; with the optional ability to dispatch on an arbitrary function
-    (fn [name args & expr]
+    (fn [name & body]
       :macro true
       `(def ~name
-         (fn ~args
-          ;;  :name 
-           ~@expr))))
+         (fn ~@body
+           :name '(str name))))) ;; the keyword works here BUT the argument is evaluated
 
   (def defmacro
     (fn [name args & expr]
       :macro true
       `(def ~name
          (fn ~args :macro true ~@expr))))
+
+  (defmacro is-assigned? [var]
+    :doc "Returns true if the variable has a binding in the current environment, else false."
+    `(try ~var true
+          :catch false))
+
+  (defmacro defn [name & body]
+    :doc "Defines a function."
+    `(if (is-assigned? ~name)
+       (.register (fn ~@body) ~name)
+       (def ~name (fn ~@body))))
 
   ;; (defmacro let [bindings & forms]
   ;;   `(fn []))
@@ -31,9 +41,16 @@
     nil)
 
   (defmacro when [condition & clauses]
+    :doc "Evaluates test. If logical true, evaluates body in an implicit do."
     `(if ~condition
        (do ~@clauses)
        nil))
+
+  (defmacro when-not [condition & clauses]
+    :doc "Evaluates test. If logical false, evaluates body in an implicit do."
+    `(if ~condition
+       nil
+       (do ~@clauses)))
 
   (defmacro cond [& clauses :else nil]
     (when clauses
@@ -53,11 +70,20 @@
     `(def ~module-name
        (py-exec ~(+ "import " (str module-name) "; " (str module-name)))))
 
-  ;; MULTIMETHODS
+  (import base_functions)
+  (import toolz)
 
-  ;; (defn register [var fn]
-  ;;   (try
-  ;;     ))
+  (defmacro assert-args [& pairs]
+    :private true
+    :doc "Used to assert that certain macros are called correctly."
+    `(do (when-not ~(first pairs)
+           (throw (py/IllegalArgumentException
+                   (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
+         ~(let [more (nnext pairs)]
+            (when more
+              (vector `assert-args more)))))
+
+  ;; MULTIMETHODS
 
   ;; (defmacro defmethod [name args & body]
   ;;   `(if (defined ~name)
@@ -66,48 +92,63 @@
   ;;         ;; :name ~name
   ;;         ~@body))))
 
-  (defmacro is-assigned [var]
-    :doc "Returns true if the variable has a binding in the current environment, else false."
-    `(try ~var true
-          :catch false))
+  (defn inc [n]
+    (+ n 1))
 
-  (defmacro defn [name args & body]
-    `(if (is-assigned ~name)
-       (.register (fn ~args ~@body) ~name)
-       (def ~name (py/Multi (fn ~args ~@body)))))
+  (defn dec [n]
+    (- n 1))
 
-  (defn mymulti [a]
-    (+ a 10))
+  ;; TYPES
 
-  (defn mymulti [a b]
-    (+ a b 10))
+  (defn vector? [x]
+    (instance? x Vector))
 
-  (defn mymulti [& args]
-    (+ args))
-
-  ;; (print (mymulti 10))
-  ;; (print (mymulti 13 12))
-  ;; (print (mymulti 13 12 10))
+  (defn map? [x]
+    (instance? x HashMap))
 
   ;; SEQUENCES
 
-  (defn first [seq]
-    (at 0 seq))
+  (def seq base_functions/sb_seq)
+  (def sort toolz/sorted)
 
-  (defn rest [seq]
-    (between 1 nil seq))
+  (defn empty [s]
+    :doc "Returns an empty sequence of the type of s."
+    (cond
+      (vector? s) []
+      (map? s) {}
+      true ((type s))))
 
-  (defn rrest [seq]
-    (rest (rest seq)))
+  (defn cons [a b]
+    (concat [a] b))
 
-  (defn second [seq]
-    (first (rest seq)))
+  (defn first [s]
+    (at 0 s))
 
-  (defn take [n seq]
-    (between 0 n seq))
+  (defn rest [s]
+    (if (seq s)
+      (between 1 nil s)
+      (empty s)))
 
-  (defn take-last [n seq]
-    (between (- n) nil seq))
+  (defn rrest [s]
+    (rest (rest s)))
+
+  (defn next [s]
+    :doc "next is like rest except that it returns nil on an empty seq"
+    (if (seq s)
+      (between 1 nil s)
+      nil))
+
+  (defn nnext [s]
+    (next (next s)))
+
+  (defn second [s]
+    (first (rest s)))
+
+  (defn take [n s]
+    (between 0 n s))
+
+  (defn take-last [n s]
+    (between (- n) nil s))
 
   ;; COMBINATORS
 
@@ -126,9 +167,6 @@
   (defn identity [x]
     :doc "Returns its argument."
     x)
-
-  (def a 30)
-  ;; (print (apply + [1 2 (* a 30)]))
 
   (def thrush (fn [a b] (b a)))
 
@@ -152,9 +190,13 @@
 
   ;; REDUCERS AND TRANSDUCERS
 
-
-
   ;; PREDICATES
+
+  (defn nil? [value]
+    (is nil value))
+
+  (defn zero? [value]
+    (= 0 value))
 
   (defn complement [predicate]
     (fn [& args] (not (apply predicate args))))
@@ -162,14 +204,20 @@
   (defn not= [a b]
     (not (= a b)))
 
-  (defn is-empty [coll]
+  (defn empty? [coll]
     (= 0 (count coll)))
 
-  (defn is-odd [n]
+  (defn even? [n]
     (= (% 2 n) 0))
 
-  (defn is-even [n]
-    (complement is-odd))
+  (defn odd? [n]
+    (= (% 2 n) 1))
+
+  (defn pos? [n]
+    (< 0 n))
+
+  (defn neg? [n]
+    (< n 0))
 
   ; or and and implemented as macros
 
@@ -188,49 +236,40 @@
   ;; SEQUENCES
 
   (defn map [f coll]
-    ;; I am worried this may be an extremely naive implementation - TCO?
-    (def r (rest coll))
-    (prepend (f (first coll))
-             (if r
-               (map f r)
-               [])))
+    :doc "Maps a function over a collection eagerly. It would be nice if it could be lazy.
+          Calls seq on its coll.
+          Also there is the possibility of making it a transducer."
+    (let [s (seq coll)]
+      (when s
+        (cons (f (first s)) (map f (rest s))))))
 
-  ;; (comment
-  ;;   "The Clojure definition. Note that the implementation is lazy, and that calling map without a collection returns a transducer."
-  ;;   ([f]
-  ;;    (fn [rf]
-  ;;      (fn
-  ;;        ([] (rf))
-  ;;        ([result] (rf result))
-  ;;        ([result input]
-  ;;         (rf result (f input)))
-  ;;        ([result input & inputs]
-  ;;         (rf result (apply f input inputs))))))
-  ;;   ([f coll]
-  ;;    (lazy-seq
-  ;;     (when-let [s (seq coll)]
-  ;;       (if (chunked-seq? s)
-  ;;         (let [c    (chunk-first s)
-  ;;               size (int (count c))
-  ;;               b    (chunk-buffer size)]
-  ;;           (dotimes [i size]
-  ;;             (chunk-append b (f (.nth c i))))
-  ;;           (chunk-cons (chunk b) (map f (chunk-rest s))))
-  ;;         (cons (f (first s)) (map f (rest s))))))))
+  (defn filter [pred coll]
+    :doc "Filters over a collection eagerly. Calls seq on its argument."
+    (let [s (seq coll)]
+      (when s
+        (let [f (first s)
+              r (rest s)]
+          (if (pred f)
+            (cons f (filter pred r))
+            (filter pred r))))))
 
-  (defn filter [predicate coll]
-    ;; this function should also return a transducer when no collection is provided
-    (def [f (first coll)
-          r (rest coll)])
-    (if (predicate f)
-      (prepend f (filter predicate r))
-      (filter predicate r)))
+  ;; (defn take)
+
+  (comment
+    ;; a way of making a mapping transducer
+    ([f]
+     (fn [rf]
+       (fn
+         ([] (rf))
+         ([result] (rf result))
+         ([result input]
+          (rf result (f input)))
+         ([result input & inputs]
+          (rf result (apply f input inputs)))))))
 
   ;; (defn reduce [f coll initial])
 
   ;; (defn odds [])
-
-
   ;; (defn evens [seq]
   ;;   ;; from a sequence, returns a sequence containing all of its elements with pair indexes
   ;;   ;; without losing order
@@ -238,8 +277,16 @@
   ;;   (when seq
   ;;     (append (first seq) new-seq)))
 
-  ;; COLLECTIONS
 
+  (defmacro -> [x & forms]
+    (if forms
+      (let [form (first forms)
+            threaded (if (seq? form)
+                       `(~(first form) ~x ~@(next form))
+                       (sexp form x))]
+        (-> threaded (next forms)))
+      x))
+  
   ;; METAPROGRAMMING
 
   (defmacro pme [expr]
@@ -258,7 +305,7 @@
       (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
 
   (defmacro test [& tests]
-    (if (is-instance (first tests) str)
+    (if (instance? (first tests) str)
       `(do (def *section-name* ~(first tests))
            ~(when (rest tests)
               `(test ~@(rest tests))))
@@ -285,11 +332,11 @@
     `(print (measure-time ~@forms)))
 
   (comment "Various comments about the base library."
-    
-    "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."
 
-    (defmacro do [& expressions]
-      :doc "Serves as an example to show that `do` is easily defined in terms of only function application.
+           "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."
+
+           (defmacro do [& expressions]
+             :doc "Serves as an example to show that `do` is easily defined in terms of only function application.
           However for practical purposes `do` is included as a special form in the interpeter."
-      `((fn []
-          ~@expressions)))))
+             `((fn []
+                 ~@expressions)))))

@@ -6,6 +6,9 @@ from typing import Tuple, Union
 from prompt_toolkit.shortcuts.prompt import PromptSession
 from prompt_toolkit.history import FileHistory
 
+import pyrsistent as p
+import toolz
+
 sys.path.insert(0, '.')
 
 # import antlr4
@@ -54,6 +57,7 @@ class Function:
         self.bindings = bindings # the bindings should hold the bindings from the args and closure
         self.loaded_ns = loaded_ns
         self.macro = r_args['macro'] if 'macro' in r_args else False
+        self.method_table = []
         if 'meta' in r_args:
             self.meta = r_args['meta']
         else:
@@ -113,12 +117,12 @@ class Multi:
         return r
     def __len__(self):
         return len(self.method_table)
-    def __call__(self, *p_args, **r_args):
-        for tup in self.method_table:
-            if signature_match(tup[0], p_args, r_args, guard = tup[2]):
-                return tup[1](*p_args, **r_args)
-        n = self.meta['name'] if 'name' in self.meta else ""
-        raise MultipleDispatchException(f"No matching signature for multimethod {n}")
+    # def __call__(self, *p_args, **r_args):
+    #     for tup in self.method_table:
+    #         if signature_match(tup[0], p_args, r_args, guard = tup[2]):
+    #             return tup[1](*p_args, **r_args)
+    #     n = self.meta['name'] if 'name' in self.meta else ""
+    #     raise MultipleDispatchException(f"No matching signature for multimethod {n}")
 
 def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
     return syntax.to_string(sexp, lb=lb)
@@ -204,12 +208,10 @@ def macroexpand(ast, env):
     symbols or autogensyms.
     """
     while is_macro_call(ast, env):
-        # print(ast[0])
         macro_fn = env.get(ast[0])
         p_args = ast[1:]
         r_args = ast.relational
         ast = macro_fn(*p_args, **r_args)
-        # print(ast)
     return ast
 
 def eval_primitive(sexp, env, loaded_namespaces):
@@ -229,9 +231,9 @@ def eval_primitive(sexp, env, loaded_namespaces):
         try: return env.get(sexp)
         except KeyError: raise UnresolvedSymbolError(sexp)
     elif isinstance(sexp, Vector):
-        return [eval_sexp(e, env, loaded_namespaces) for e in sexp]
+        return p.pvector([eval_sexp(e, env, loaded_namespaces) for e in sexp])
     elif isinstance(sexp, Map):
-        return {eval_sexp(key, env, loaded_namespaces): eval_sexp(sexp[key], env, loaded_namespaces) for key in sexp}
+        return p.pmap({eval_sexp(key, env, loaded_namespaces): eval_sexp(sexp[key], env, loaded_namespaces) for key in sexp})
     else: # if the value is an atomic data type, cannot evaluate further
         return sexp
 
@@ -242,8 +244,8 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
     and the namespace in which the execution is working at the moment.
     By default, execution starts in the `None` namespace, which corresponds to the standard library.
     """
-    # print(print_sexp(sexp))
     while True:
+        # print(sexp)
         if not isinstance(sexp, SymbolicExpression):
             return eval_primitive(sexp, env, loaded_namespaces)
 
@@ -257,19 +259,16 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
         if len(sexp.positional) == 0:
             return None
         ## Special Forms: ##
-        # if isinstance(head := sexp.positional[0], SymbolicExpression):
-        #     evaledPArgs = [eval_sexp(e, env, loaded_namespaces) for e in sexp.positional]
-        #     evaledRArgs = {eval_sexp(key, env, loaded_namespaces): \
-        #                         eval_sexp(sexp.relational[key], env, loaded_namespaces) \
-        #                         for key in sexp.relational}
-        #     return evaledPArgs[0](*evaledPArgs[1:], **evaledRArgs)
+        if isinstance(head := sexp.positional[0], SymbolicExpression):
+            head = sexp.positional[0] = eval_sexp(head, env, loaded_namespaces)
         head = sexp.positional[0]
-        if "def" == head.name:
+        is_s = isinstance(head, Symbol)
+        if is_s and "def" == head.name:
             ## def adds a binding (from unevaluated first arg to evaled second arg) in the environment ##
             if len(sexp.positional) < 3 and not isinstance(sexp.positional[1], Vector):
                 raise SyntaxError("`def` statement has invalid argument pattern")
             a1 = sexp.positional[1]
-            if isinstance(a1, list):
+            if isinstance(a1, Vector):
                 for name, value in zip(a1[0::2], a1[1::2]):
                     res = eval_sexp(value, env, loaded_namespaces)
                     env.set(name, res)
@@ -278,11 +277,10 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
                 a2 = sexp.positional[2]
                 res = eval_sexp(a2, env, loaded_namespaces)
                 return env.set(a1, res)
-        elif "quote" == head.name:
+        elif is_s and "quote" == head.name:
             if len(sexp.positional) != 2: raise Exception("`quote` expected 1 argument")
             return sexp.positional[1]
-        elif "if" == head.name:
-            # print("Going into if ")
+        elif is_s and "if" == head.name:
             if len(sexp.positional) < 3:
                 raise SyntaxError("Too few arguments to if")
             if len(sexp.positional) > 4:
@@ -290,17 +288,15 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
             cond, then = sexp.positional[1:3]
             evaled_cond = eval_sexp(cond, env, loaded_namespaces)
             if evaled_cond:
-                # return eval_sexp(then, env, loaded_namespaces)
                 sexp = then 
                 continue # TCO
             else:
                 if (len(sexp.positional) == 4):
                     _else = sexp.positional[3]
-                    # return eval_sexp(_else, env, loaded_namespaces)
                     sexp = _else 
                     continue # TCO
                 else: return None
-        elif "fn" == head.name:
+        elif is_s and "fn" == head.name:
             arg1 = sexp.positional[1]
             if isinstance(arg1, Vector):
                 # anonymous function (single method declaration)
@@ -319,25 +315,27 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
                     # argVector, body = exp.positional[0], exp.positional[1:]
                     fn = fn.register(Function(exp.positional[0], exp.positional[1:], env, loaded_namespaces, sexp.relational))
                 return fn
-        elif "do" == head.name:
+        elif is_s and "do" == head.name:
             # TODO: add scope to the do
             if len(sexp.positional) == 1: return None
-            eval_sexp(sexp[1:-1], env, loaded_namespaces)
+            for e in sexp[1:-1]:
+                eval_sexp(e, env, loaded_namespaces)
             sexp = sexp[-1]
             continue # TCO
-        # elif "let" == head.name:
-        #     # I should remove the let
-        #     ## creates a new environment and binds the values to it successively (in order) ##
-        #     vec, body = sexp.positional[1], sexp.positional[2:]
-        #     let_env = SimbaEnvironment(outer = env)
-        #     for i in range(0, len(vec), 2):
-        #         let_env.set(vec[i], eval_sexp(vec[i+1], let_env, loaded_namespaces))
-        #     ## evaluate the body in an implicit do ##
-        #     last = None
-        #     for exp in body:
-        #         last = eval_sexp(exp, let_env, loaded_namespaces)
-        #     return last
-        elif "try" == head.name:
+        elif is_s and "let" == head.name:
+            # creates a new environment and binds the values to it successively (in order)
+            # evaluates the body in an implicit do
+            if len(sexp.positional) == 2: raise SyntaxError("`let` form is missing a body.")
+            vec = sexp.positional[1]
+            env = SimbaEnvironment(outer = env)
+            for i in range(0, len(vec), 2):
+                env.set(vec[i], eval_sexp(vec[i+1], env, loaded_namespaces))
+            # env.make_immutable()
+            for exp in sexp[2:-1]:
+                eval_sexp(exp, env, loaded_namespaces)
+            sexp = sexp[-1]
+            continue # TCO
+        elif is_s and "try" == head.name:
             if Keyword('catch') in sexp and Keyword('finally') in sexp:
                 try:
                     res = None
@@ -369,14 +367,14 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
                 for exp in sexp[1:]:
                     res = eval_sexp(exp, env, loaded_namespaces)
                 return res
-        elif "ns" == head.name:
+        elif is_s and "ns" == head.name:
             # 1. Initialize the namespace and add it to the namespaces
             # 2. Jump into the namespace to start evaluation
             last = None
             for exp in sexp.positional[2:]:
                 last = eval_sexp(exp, env, loaded_namespaces)
             return last
-        elif "require" == head.name:
+        elif is_s and "require" == head.name:
             # MAYBE THE NAMESPACE SHOULD ALWAYS HAVE ITSELF AS A PARENT NAMESPACE? THIS WAY I RESOLVE THE SELF-QUALIFYING PROBLEM
             ns_name = sexp.positional[1].name
             if ns_name not in loaded_namespaces:
@@ -390,8 +388,7 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
                 env.require_ns(ns_name, loaded_namespaces[ns_name])
             else:
                 env.require_ns(ns_name, loaded_namespaces[ns_name])
-        elif "include" == head.name:
-            # print("Including")
+        elif is_s and "include" == head.name:
             ns_name = sexp.positional[1].name
             if ns_name not in loaded_namespaces:
                 # creates a new environment for the new namespace
@@ -405,15 +402,12 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
                 break
             else:
                 env.include_ns(ns_name, loaded_namespaces[ns_name])
-                # print("made it second")
                 break
-        elif "quasiquote" == head.name:
+        elif is_s and "quasiquote" == head.name:
             # print(sexp)
-            # print(print_sexp(quasiquote(sexp[1])))
-            # return eval_sexp(quasiquote(sexp[1]), env, loaded_namespaces)
             sexp = quasiquote(sexp[1])
             continue # TCO
-        elif "macroexpand" == head.name:
+        elif is_s and "macroexpand" == head.name:
             if len(sexp.positional) != 2: return Exception("`macroexpand` expected 1 argument.")
             return macroexpand(sexp[1], env)
         else:
@@ -423,9 +417,17 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
             evaledRArgs = {eval_sexp(key, env, loaded_namespaces): \
                             eval_sexp(sexp.relational[key], env, loaded_namespaces) \
                             for key in sexp.relational}
-            if isinstance(fun := evaledPArgs[0], Function): # or isinstance(head, Multi):
-                # print("Yoohoo")
-                # print (bind_fn_args(fun.args, evaledPArgs[1:], evaledRArgs))
+            if isinstance(fun := evaledPArgs[0], Multi):
+                matched = False
+                for tup in fun.method_table:
+                    if signature_match(tup[0], evaledPArgs[1:], evaledRArgs, guard = tup[2]):
+                        fun = evaledPArgs[0] = tup[1]
+                        matched = True
+                        break
+                if not matched: raise MultipleDispatchException(f"No matching signature {evaledPArgs} for multimethod {sexp[0].name}")
+            if isinstance(fun, Function):
+                if len(fun.ast) == 0:
+                    return None
                 env = SimbaEnvironment(
                     outer = fun.bindings,
                     names = bind_fn_args(fun.args, evaledPArgs[1:], evaledRArgs) # args are the names of the env
@@ -435,7 +437,7 @@ def eval_sexp(sexp, env, loaded_namespaces = {}):
                 continue
             else:
                 ## apply the head ##
-                return evaledPArgs[0](*evaledPArgs[1:], **evaledRArgs)
+                return fun(*evaledPArgs[1:], **evaledRArgs)
 
 
 def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):
@@ -453,7 +455,6 @@ def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):
         # get the test namespaces
         test_ns_list = helpers.find_test_ns(ast_list)
         # run them
-        # print(test_ns_list)
         for ns in test_ns_list:
             eval_sexp(ns, SimbaEnvironment(names = repl_env))
         return
@@ -475,5 +476,4 @@ elif __name__ == "__main__" and len(sys.argv) > 1:
     # if not (args.files.contains('libraries') or args.files.contains('libraries/base.sb')):
     #     args.files = args.files + ['libraries/base.sb']
     program_ast = helpers.read_files(_reader, args.files) # + helpers.read_files(_reader, ['standard'])
-    # print(print_sexp(ast))
     res = namespaced_eval(program_ast, args.run_tests, args.main)

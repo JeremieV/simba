@@ -1,15 +1,22 @@
 (ns recursion-test
-;;   (include base)
+  (include base)
 
-  (def sum-to (fn [n acc]
-         (if (= n 0)
-           acc
-           (sum-to (- n 1) (+ n acc)))))
+  ;; (defn sum-to [n acc]
+  ;;   (if (= n 0)
+  ;;     acc
+  ;;     (sum-to (- n 1) (+ n acc))))
 
-;;   (print
-;;    (time (sum-to 1000 0)))
-  
-  (sum-to 1000 0)
+  (defn sum-to
+    ([n acc]
+     (if (= n 0)
+       acc
+       (sum-to (- n 1) (+ n acc))))
+    ([n other acc] (+ n other acc)))
+
+  ;; (print
+  ;;  (time (sum-to 1000 0)))
+
+;;   (sum-to 1000 0)
 
   "Timing before tail-recursion optimization: 0.004144906997680664"
   "Timing after tail-recursion optimization: "
@@ -19,4 +26,28 @@
 
   "Without TCO: `RecursionError: maximum recursion depth exceeded while calling a Python object`"
   "With TCO: "
+
+
+  ;; (print (concat [1 2] [1 2 3 (+ 12 3)]))
+
+  ;; (print {1 2
+  ;;         3 4
+  ;;         5 6})
+
+  ;; (pme (tests "Hello"
+    
+  ;;   "Section"
+  ;;   1 2))
+  
+  ;; (pme (test "Section" 1 2))
+  
+  ;; (single-test "My test"  2 1)
+
+  ;; (print (is symbol do))
+  
+  (do
+    (print 34)
+    (print 3)
+    (print 0))
+  
   )

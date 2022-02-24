@@ -141,3 +141,13 @@
 #     while true:
 #         # when you encounter recur, call next
 #         # at the end, call break
+
+import collections.abc
+import pyrsistent
+import toolz
+
+data = pyrsistent.pmap({'one': 1, 'two': 2, 'three': 3, 'four': 4})
+
+print(data.items())
+
+# print(isinstance(pyrsistent.pvector([1, 2, 3]), collections.abc.Sequence))

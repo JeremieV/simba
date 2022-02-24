@@ -1,5 +1,7 @@
 import re
 from simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword)
+import pyrsistent as p
+import pvectorc
 
 class Blank(Exception): pass
 
@@ -80,13 +82,13 @@ def readMap(reader):
         if isinstance(name, Keyword):
             name = str(name)
         m[name] = value
-    return m
+    return p.pmap(m)
 
 def readSymbolicExpression(reader):
     return SymbolicExpression(*read_sequence(reader, '(', ')'))
 
 def readVector(reader):
-    return Vector(read_sequence(reader, '[', ']'))
+    return p.pvector(read_sequence(reader, '[', ']'))
 
 def read_form(reader):
     "Reads a single Simba form. Raises an exception for unmatched parens."
@@ -142,19 +144,19 @@ def to_string(obj, indent=0, lb=True) -> str:
         start = '\n'
     else:
         start = ''
-    if type(obj) == SymbolicExpression:
+    if isinstance(obj, SymbolicExpression):
         if obj.positional and obj.relational:
             return start + " "*indent + "(" + " ".join(to_string(e,indent=indent+2) for e in obj.positional) + " " + " ".join(to_string(Keyword(key), indent=indent+2) + " " + to_string(obj.relational[key], indent=indent+2) for key in obj.relational) + ")"
         elif obj.relational:
             return "(" + " ".join(to_string(Keyword(key), indent=indent, lb=lb) + " " + to_string(obj.relational[key], indent=indent+2) for key in obj.relational) + ")"
         else: return start + " "*indent + "(" + " ".join(to_string(e, indent=indent+2) for e in obj.positional) + ")"
-    elif type(obj) == Vector:
+    elif isinstance(obj, Vector):
         return "[" + " ".join(to_string(e) for e in obj) + "]"
-    elif type(obj) == Map:
+    elif isinstance(obj, Map):
         return "{" + " ".join(to_string(k, indent=indent, lb=lb) + " " + to_string(obj[k], indent=indent, lb=lb) + "\n" for k in obj) + "}"
-    elif type(obj) == Keyword:
+    elif isinstance(obj, Keyword):
         return start + " "*indent + ':' + str(obj)
-    elif type(obj) == str:
+    elif isinstance(obj, str):
         # if len(obj) > 0 and obj[0] == '\u029e':
         #     return ':' + obj[1:]
         return '"' + _escape(obj) + '"'
