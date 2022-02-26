@@ -17,7 +17,16 @@ import toolz
 
 import collections.abc
 
-from src.simba_exceptions import SimbaException
+from simba_exceptions import SimbaException
+
+def sb_apply(fn, *args, **kwargs):
+    """Function application. Conses all the arguments between the first and the last to the last.
+    Also applies any keyword arguments to the function."""
+    arglist = []
+    for e in args[:-1]:
+        arglist.append(e)
+    arglist = arglist + [*args[-1]]
+    return fn(*arglist, **kwargs)
 
 def sb_add(x, y):
     if x is None:
@@ -63,12 +72,12 @@ def sb_generic_concat(a, b):
     This function covers the built-in Python sequences and always returns a sequence
     of the same type as the first value."""
     # TODO: also define a function that works on n parameters
-    if type(a) == type(b):
-        return a+b
     if b is None:
         return a
     if a is None:
         return b
+    if type(a) == type(b):
+        return a+b
     elif isinstance(a, tuple):
         return a + tuple(b)
     elif isinstance(a, list):

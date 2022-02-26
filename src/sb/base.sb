@@ -106,10 +106,12 @@
   (defn map? [x]
     (instance? x HashMap))
 
+  (defn sexp? [x]
+    (instance? x sexp))
+
   ;; SEQUENCES
 
   (def seq base_functions/sb_seq)
-  (def sort toolz/sorted)
 
   (defn empty [s]
     :doc "Returns an empty sequence of the type of s."
@@ -152,17 +154,10 @@
 
   ;; COMBINATORS
 
-  (defmacro apply [f & args]
-    :doc "Applies the function f to the arguments x."
-    (def l (count args))
-    (cond
-      (= 0 l) `(~f)
-      (= 1 l) `(~f ~@(first args))
-      (= 2 l) `(~f ~@(prepend (first args) (second args)))
-      ;; (< 2 l) `(~f ~@(concat (between 0 -1 args) (at -1 args)))
-      (< 2 l) `(~f ~@(concat (take (- (count args) 1) args) (first (take-last 1 args))))
-      ;
-      ))
+  (def apply
+    :doc "Function application. Returns the result of applying f to the last argument, which has to be a sequence. Any arguments before the last are prepended to the sequence."
+    :signature '[f & args]
+    base_functions/sb_apply)
 
   (defn identity [x]
     :doc "Returns its argument."
@@ -170,23 +165,18 @@
 
   (def thrush (fn [a b] (b a)))
 
-  (defn compose [] identity)
-  (defn compose [f] f)
-  (defn compose [f g]
+  (defn compose
     :doc "An extended version of the bluebird combinator."
-    (fn [& args]
-      (f (apply g args))))
-
-  ;; ((fn [& args]
-  ;;     (not (apply = args))) 1 2 3)
-
-  ;; (print ((fn [& args]
-  ;;           (print args)
-  ;;           (apply = args)) 2 2))
-
-  ;; (defn complement [predicate]
-  ;;   :doc "Returns the logical complement of a predicate."
-  ;;   (compose not predicate))
+    ([] identity)
+    ([f] f)
+    ([f g] (fn [& args]
+             (f (apply g args)))))
+  
+  (defn partial
+    :doc "Takes a function with fewer args than normal, and returns a function that takes a variable amount of additional args. When called, the returned function calls f with args + additional args."
+    ([f] f)
+    ([f & args] (fn [& more-args]
+                  (apply f (concat args more-args)))))
 
   ;; REDUCERS AND TRANSDUCERS
 
@@ -199,6 +189,7 @@
     (= 0 value))
 
   (defn complement [predicate]
+    :alternative-implementation '(compose not predicate)
     (fn [& args] (not (apply predicate args))))
 
   (defn not= [a b]
@@ -252,6 +243,8 @@
           (if (pred f)
             (cons f (filter pred r))
             (filter pred r))))))
+  
+  (defn reduce [] nil)
 
   ;; (defn take)
 
@@ -277,20 +270,21 @@
   ;;   (when seq
   ;;     (append (first seq) new-seq)))
 
-
   (defmacro -> [x & forms]
     (if forms
       (let [form (first forms)
-            threaded (if (seq? form)
+            threaded (if (sexp? form)
                        `(~(first form) ~x ~@(next form))
                        (sexp form x))]
-        (-> threaded (next forms)))
+        (if (next forms)
+          `(-> ~threaded ~@(next forms))
+          threaded))
       x))
-  
+
   ;; METAPROGRAMMING
 
   (defmacro pme [expr]
-    ;; stands for 'print-macro-expansion'
+    :doc "short for 'print macro expansion'"
     `(print
       (macroexpand ~expr)))
 

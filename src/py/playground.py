@@ -3,9 +3,6 @@ import dis  # disassembler
 import ast  # new one
 import inspect
 
-# Other VM types than stack-oriented?
-# Anything that looks like a graph?
-
 def fib(n):
     if n < 2:
         return n

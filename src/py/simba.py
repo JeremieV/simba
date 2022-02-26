@@ -1,8 +1,8 @@
-#! python3
 import sys, traceback
 from types import ModuleType
 from typing import Tuple, Union
 
+import argparse
 from prompt_toolkit.shortcuts.prompt import PromptSession
 from prompt_toolkit.history import FileHistory
 
@@ -18,8 +18,6 @@ from simba_types import *
 from simba_exceptions import MultipleDispatchException
 import helpers
 
-# command-line
-import argparse
 
 # _reader    = sexprs_reader_printer.SexpReader
 # _read_form  = sexprs_reader_printer.read_str
@@ -117,12 +115,12 @@ class Multi:
         return r
     def __len__(self):
         return len(self.method_table)
-    # def __call__(self, *p_args, **r_args):
-    #     for tup in self.method_table:
-    #         if signature_match(tup[0], p_args, r_args, guard = tup[2]):
-    #             return tup[1](*p_args, **r_args)
-    #     n = self.meta['name'] if 'name' in self.meta else ""
-    #     raise MultipleDispatchException(f"No matching signature for multimethod {n}")
+    def __call__(self, *p_args, **r_args):
+        for tup in self.method_table:
+            if signature_match(tup[0], p_args, r_args, guard = tup[2]):
+                return tup[1](*p_args, **r_args)
+        n = self.meta['name'] if 'name' in self.meta else ""
+        raise MultipleDispatchException(f"No matching signature for multimethod {n}")
 
 def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
     return syntax.to_string(sexp, lb=lb)
@@ -140,12 +138,13 @@ def convert(string, _from, to):
 #     if print_result: print(print_sexp(result))
 
 def simba_repl(multi = False):
+    """Command-line repl that executes everything in the base namespace by default."""
     eof = False
     _env = SimbaEnvironment(names = repl_env)
     loaded = {}
     session = PromptSession(FileHistory('~/.simba_history'))
-    # load the standard libraries
-    eval_sexp(helpers.read_files(_reader, ['standard']), _env, loaded)
+    # load the standard library
+    eval_sexp(helpers.read_files(_reader, ['src/sb/base.sb']), _env, loaded)
     def eval_util(e):
         res = eval_sexp(e, _env, loaded)
         print(print_sexp(res))
@@ -238,8 +237,7 @@ def eval_primitive(sexp, env, loaded_namespaces):
         return sexp
 
 def eval_sexp(sexp, env, loaded_namespaces = {}):
-    """
-    `ns_eval_exp` evaluates a Symbolic Expression within a context.
+    """`eval_exp` evaluates a Symbolic Expression within a context.
     The context is the 'environment' a mapping of names to namespaces,
     and the namespace in which the execution is working at the moment.
     By default, execution starts in the `None` namespace, which corresponds to the standard library.
