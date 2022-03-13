@@ -1,18 +1,39 @@
+;; this file tests the namespace functionality provided by Simba
+;; can we namespace qualify symbols in the current namespace?
+;; can we namespace qualify symbols in included namespaces?
+;; is the base namespace included by default ?
+;; multiple namespaces in a file?
+
+;; (ns required)
+
+;; (print hello)
+
 (ns required)
 
-(ns included
-  
-  (def a 30)
-  
+(def a 30)
 
-  )
+(ns namespaces-test)
 
-(ns namespaces-test
-  (require test)
-  (include included)
+(require required)
+;; here the value of a depends on the order of the statements
+(def a 20)
 
-  (test/st "namespaces"
+;; (print (py/abs -3))
 
-   (test/t ""
-           a 30))
-  )
+(base/defn double [x] (* 2 x)) ;; base can be namespace/qualified
+
+(print a);; preferentially returns local variables
+(print required/a) ;; can properly access namespaced vars
+(print namespaces-test/a) ;; but can also disambiguate
+
+(print *ns*)
+;; (tests "base namespace"
+
+;; can shadow special forms
+
+;;   (map double [1 2 3 4 5]) [2 4 6 8 10] ;; base namespace symbols available
+
+;;   (include required) nil
+
+;;   namespaces-test/a 30)
+

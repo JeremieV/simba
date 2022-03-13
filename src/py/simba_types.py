@@ -4,7 +4,7 @@ Many data types are declared as aliases for the benefit of being able to call is
 """
 from re import split
 import helpers
-from simba_exceptions import UnresolvedSymbolError
+from simba_exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
 import pyrsistent as p
 
 # Atomic Data Types
@@ -12,13 +12,13 @@ class Symbol:
     def __init__(self, string):
         split_str = split('/', string)
         if string == '/': self.name = '/'; self.namespace = None
-        elif len(split_str) > 2: raise SyntaxError("A symbol can only have one namespace qualifier.")
+        elif len(split_str) > 2: raise SimbaSyntaxError("A symbol can only have one namespace qualifier.", string, None, None)
         elif len(split_str) == 2:
-            if split_str[0] == '' or split_str[1] == '': raise SyntaxError("None of the two members of the symbol should be empty.")
+            if split_str[0] == '' or split_str[1] == '': raise SimbaSyntaxError("None of the two members of the symbol should be empty.", string, None, None)
             self.namespace = split_str[0]
             self.name = split_str[1]
         elif len(split_str) == 1:
-            if split_str[0] == '': raise SyntaxError("A symbol cannot be empty (duh).")
+            if split_str[0] == '': raise SimbaSyntaxError("A symbol cannot be empty.", string, None, None)
             self.namespace = None
             self.name = split_str[0]
     def __str__(self):
@@ -31,10 +31,9 @@ class Symbol:
         if __o.name == self.name and __o.namespace == self.namespace: return True
         return False
 
-Number = (int, float)
+# Number = (int, float)
 Environment = dict
 class Keyword(str): pass
-# class AstIgnore: pass
 
 # Symbolic Data Types
 
@@ -91,7 +90,7 @@ class SymbolicExpression():
         #     self.positional = self.positional + SymbolicExpression(sexp).positional
         #     return self
         else:
-            raise Exception(f"Tried to concat SymbolicExpression with unsupported type {type(sexp)}")
+            raise SimbaException(f"Tried to concat SymbolicExpression with unsupported type {type(sexp)}", sexp, None, None)
 
 # Collection Data Types
 
@@ -106,34 +105,37 @@ class Protocol():
 #       INTERNAL
 # =====================
 
-class SimbaEnvironment():
+class Environment():
     """Just like a scheme environment. Contains a mapping of symbols to namespaces and an outer environment.
     An addition that is made to the typical environment"""
-    def __init__(self, outer = None, names = {}, namespaces = {}, referred = []):
+    def __init__(self, outer = None, names = None, namespaces = None, referred = None, name = None):
         self.outer = outer
-        self.names = names
-        self.namespaces = namespaces
-        self.referred = referred
-    #     self.immutable = False
-    # def make_immutable(self):
-    #     self.immutable = True
+        self.names = {} if names is None else names
+        self.namespaces = {} if namespaces is None else namespaces
+        self.referred = [] if referred is None else referred
+        # the presence of a name indicates that the environment is a namespace
+        # as such, `if (env.name)` serves to know if `env` is an `ns`
+        self.name = name
+        # self.ns_name = ns_name
     def set(self, symbol, value):
         """Change or add a binding. The binding has to be in the local namespace."""
-        # there is a bug here: what if the current namespace is qualified! we could just add the current ns as param to __init__
-        if symbol.namespace != None: raise("Cannot change a binding outside of current namespace.")
+        if symbol.namespace is not None and self.ns_name != symbol.namespace:
+            raise SimbaException("Cannot change a binding outside of current namespace.", None, self, self.ns_name)
         env = self.find(symbol)
         if env is None or env is self:
             self.names[symbol.name] = value
         else:
             env.set(symbol, value)
     def find(self, symbol):
-        """Looks for a binding, first in current env, and then in outer, and so on. Returns the env where the match is made first.
-        If the symbol is namespace-qualified, look for the binding directly in that namespace."""
+        """Looks for a binding, first in current env, and then in outer, and so on. Returns the env where the match is made first."""
         # there is a bug here bc you have to look in the namespaces of the outer envs also
+        # print(f"finding {symbol}")
         ns = symbol.namespace
+        # if the symbol is namespace-qualified, look for the binding directly in that namespace.
         if ns is not None:
-            # there is a bug here bc if the namespace is qualified to be the current ns
-            if ns in self.namespaces:
+            if self.ns_name == ns:
+                return self
+            elif ns in self.namespaces:
                 return self.namespaces[ns]
             else:
                 return self.outer.find(symbol)
@@ -151,6 +153,7 @@ class SimbaEnvironment():
         return None
     def get(self, symbol):
         """Returns the binding if it is in current env or parents."""
+        # print(f"getting {symbol}")
         strkey = symbol.name
         # there is a bug here bc you have to look in the namespaces of the outer envs also
         # if symbol.namespace != None: return self.namespaces[strkey].get(symbol)
@@ -158,7 +161,7 @@ class SimbaEnvironment():
             return self.names[strkey]
         location = self.find(symbol)
         if location is None:
-            raise UnresolvedSymbolError(strkey)
+            raise UnresolvedSymbolError(strkey, strkey, self, self.name)
         return location.get(symbol)
     def require_ns(self, ns_name:str, ns):
         self.namespaces[ns_name] = ns
@@ -166,3 +169,26 @@ class SimbaEnvironment():
         self.require_ns(name, ns)
         self.referred.append(ns)
         # it's also possible to refer individual names by creating small namespaces
+
+# class Namespace(Environment):
+#     """Just like an environment except that it has a dictionary of required and included namespaces."""
+#     def __init__(self):
+#         self.name = name
+#     def set(self, symbol, value):
+#         """Change or add a binding. The binding has to be in the current namespace."""
+#         if symbol.namespace is not None and symbol.namespace != self.name:
+#             raise ImmutableBindingException("Cannot mutate a binding outside of current namespace.")
+#         env = self.find(symbol)
+#         if env is None or env is self:
+#             self.names[symbol.name] = value
+#         else:
+#             env.set(symbol, value)
+#     def find():
+#         pass
+#     def get():
+
+#     def require_ns(self, ns_name:str, ns):
+#         self.namespaces[ns_name] = ns
+#     def include_ns(self, name, ns):
+#         self.require_ns(name, ns)
+#         self.referred.append(ns)

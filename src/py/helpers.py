@@ -1,4 +1,5 @@
 import os
+from simba_exceptions import MultipleNamespacesError, NoNamespaceError
 import sexprs_reader_printer
 
 def reverse(lst):
@@ -80,6 +81,42 @@ def find_ns(name, ast_list):
     if len(res) == 0:
         raise Exception(f"No `{name}` namespace was found.")
     return res[0]
+
+def return_ns(name, ast_list):
+    from simba_types import Symbol, SymbolicExpression
+    res = []
+    is_found = False
+    adding = False
+    for exp in ast_list:
+        cond = isinstance(exp, SymbolicExpression)
+        if cond and exp[0] == Symbol("ns") and exp[1] == Symbol(name):
+            if is_found: raise MultipleNamespacesError(f"Multiple namespaces of the name {name} were found.")
+            is_found = True
+            adding = True
+        elif cond and exp[0] == Symbol("ns"):
+            adding = False
+        if adding:
+            res.append(exp)
+    if not is_found: raise NoNamespaceError(f"No namespace of the name {name} was found.")
+    return res
+
+def return_test_ns(ast_list):
+    from simba_types import Symbol, SymbolicExpression
+    res = []
+    is_test = False
+    is_found = False
+    for exp in ast_list:
+        cond = isinstance(exp, SymbolicExpression)
+        if cond and exp[0] == Symbol("ns") and isinstance(exp[1], Symbol) and exp[1].name[-5:] == "-test":
+            res.append([])
+            is_test = True
+            is_found = True
+        elif cond and exp[0] == Symbol("ns"):
+            is_test = False
+        if is_test:
+            res[-1].append(exp)
+    if not is_found: raise NoNamespaceError(f"No test namespace was found.")
+    return res
 
 def get_base_namespace(reader):
     return read_files(reader, ['libraries/base.sb'])

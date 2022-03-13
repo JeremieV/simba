@@ -50,8 +50,14 @@ def sb_seq(seqable):
         if len(s := seqable.items()) == 0:
             return None
         return s
+    elif isinstance(seqable, dict):
+        return pyrsistent.pvector(seqable.items())
+    elif isinstance(seqable, SymbolicExpression):
+        return pyrsistent.pvector(seqable)
     elif seqable is None:
         return None
+    else:
+        raise SimbaException(f"Don't know how to make a seq from {type(seqable)}", None, None, None)
 
 def sb_prepend_sexp(e, seq):
     """Defines a generic prepend function that should work on all sequence types.
@@ -102,7 +108,7 @@ def sb_uniform_access(*attrs):
             return eval(f"obj.{attr}")(*args)
         else:
             return a
-    raise SimbaException(f"{obj} has no attribute {attr}")
+    raise SimbaException(f"{obj} has no attribute {attr}", None, None, None)
 
 def throw(e): raise e
 
@@ -160,11 +166,12 @@ repl_env = {
     'tuple': tuple,
     't': lambda *t: t,
     'HashMap': Map,
-    'hash-map': pyrsistent.m,
+    'hash-map': pyrsistent.pmap,
     'set': set,
     'exception': Exception,
     'type': type,
     'str': str,
+    'bytes': bytes,
 
     # magic or dunder methods: https://rszalski.github.io/magicmethods/
     'new': lambda obj, *args, **kwargs: obj(*args, **kwargs),

@@ -3,3 +3,4 @@ env/
 __pycache__
 .clj-kondo/
 .lsp/
+formatting-settings.cljfmt.edn

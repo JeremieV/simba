@@ -1,197 +1,243 @@
 (ns language-test
-  (include base)
   :doc "Tests for the built-in language features, such as closures"
   :date-created "3 February 2022"
-  :author "Jérémie Vaney"
-;;   :include [base]
+  :author "Jérémie Vaney")
+;; :include [base]
+  
+(include base)
 
-  (tests "Built-in language features"
+;; importantly tests whether the implementation can manage top level literals that are not SymbolicExpressions 
+(def xyz 3)
+xyz
+"test string"
+123
 
-    "if"
-    (if true nil) nil
-    (if false true false) false
-    ;; (cond
-    ;;   false "yes"
-    ;;   false "no"
-    ;;   true "default") "default"
-    ;; (cond
-    ;;   false "yes"
-    ;;   true "no"
-    ;;   true "default") "no"
-    ;; (if something :then
-    ;;     (do this)
-    ;;  :else
-    ;;     (do that))
+(tests "Built-in language features"
 
-    "def"
-    (try
-      (def)
-      :catch "exception") "exception"
-    (try
-      (def zzz)
-      :catch "exception") "exception"
-    ;;   a def returns nil
-    (def a 3) nil
-      ;; a definiton binds a symbol to its evaluated expression
-    (do
-      (def b (+ 5 (- 10 5)))
-      b) 10
-      ;; a definition can bind multiple elements at once, if they are in a vector
-    (def [c 1 d 2]) nil
-    (do
-      (def [e 10 f 30])
-      (+ e f)) 40
-    ;; (do (def [g (+ 50 (* 34 70))
-    ;;           h (- g 430)])
-    ;;     (py/toolz.cons h (py/toolz.cons g []))) [2430 2000]
-      ;; TODO add cases that should throw errors
+  "if"
+  (if true nil) nil
+  (if false true false) false
+  ;; (cond
+  ;;   false "yes"
+  ;;   false "no"
+  ;;   true "default") "default"
+  ;; (cond
+  ;;   false "yes"
+  ;;   true "no"
+  ;;   true "default") "no"
+  ;; (if something :then
+  ;;     (do this)
+  ;;     :else
+  ;;     (do that))
 
-    "let"
-    (let [a 30
-          b 60]
-      (+ a b)) 90
-    
-    (let [a 1
+  "def"
+  (try
+    (def)
+    :catch "exception") "exception"
+  (try
+    (def zzz)
+    :catch "exception") "exception"
+  ;; a def returns nil
+  (def a 3) nil
+  ;; a definiton binds a symbol to its evaluated expression
+  (do
+    (def b (+ 5 (- 10 5)))
+    b) 10
+  ;; a definition can bind multiple elements at once, if they are in a vector
+  (def [c 1 d 2]) nil
+  (do
+    (def [e 10 f 30])
+    (+ e f)) 40
+  ;; (do (def [g (+ 50 (* 34 70))
+  ;;           h (- g 430)])
+  ;;     (py/toolz.cons h (py/toolz.cons g []))) [2430 2000]
+  ;; TODO add cases that should throw errors
+
+  "let"
+  (let [a 30
+        b 60]
+    (+ a b)) 90
+
+  (let [a 1
         b 2]
-      (let [a 3]
+    (let [a 3]
         ;; (def a 4)
-        (+ a b))) 5
+      (+ a b))) 5
 
-    "closures"
-      ;; calling an empty function - should return nil
-    ((fn [])) nil
-    ((fn [] ())) nil
-    (do) nil
-      ;; ((fn [a b c] nil)) nil ;; TODO: add a nice error message and an error system for the language
+  "closures"
+  ;; calling an empty function - should return nil
+  ((fn [])) nil
+  ((fn [] ())) nil
+  (do) nil
+  ;; ((fn [a b c] nil)) nil ;; TODO: add a nice error message and an error system for the language
 
-      ;; definitions made inside a closure should not be visible from an outer scope
-    ((fn []
-       (def a 60)
-       a)) 60
+  ;; definitions made inside a closure should be visible from an outer scope
+  (do ((fn []
+         (def a 60)
+         a))
+      a) 60
 
-    "MultiMethods"
-    ((fn [a b c] (+ a b c)) 1 2 3) 6
-    (def h (fn
-             ([] 0)
-             ([a b] 2)
-             ([c d e] 3))) nil
-    (h) 0
-    ;; (h 1) 0
-    (try (h 1)
-         :catch "error") "error"
-    (h 1 2) 2
-    (h 0 0 0) 3
+  "Multiple arities"
+  ((fn [a b c] (+ a b c)) 1 2 3) 6
+  (def h (fn
+           ([] 0)
+           ([a b] 2)
+           ([c d e] 3))) nil
+  (h) 0
+  (try (h 1)
+       :catch "error") "error"
+  (h 1 2) 2
+  (h 0 0 0) 3
 
-    ;; (defn my-identity-multi
-    ;;   ([] nil)
-    ;;   ([one] one)
-    ;;   ([one two] [one two])) nil
+  (defn my-identity-multi
+    ([] nil)
+    ([one] one)
+    ([one two] [one two])) nil
 
-    ;; (my-identity-multi) nil
-    ;; (my-identity-multi 33) 33
-    ;; (my-identity-multi 'two-args (+ 1 2)) ['two-args 3]
+  (my-identity-multi) nil
+  (my-identity-multi 33) 33
+  (my-identity-multi 'two-args (+ 1 2)) ['two-args 3]
 
-    "equality"
-    (= 1 1) true
-    (= nil nil) true
-    (= true true) true
-    (= false false) true
-    (= true false) false
-    (= nil true) false
-    (= nil false) false
-    (= nil 0) false
-    {:one 1
-     :meta 'this
-     :code '(sexp object)}
-    {"one" 1
-     "meta" 'this
-     "code" '(sexp object)}
+  "equality"
+  (= 1 1) true
+  (= nil nil) true
+  (= true true) true
+  (= false false) true
+  (= true false) false
+  (= nil true) false
+  (= nil false) false
+  (= nil 0) false
+  {:one 1
+   :meta 'this
+   :code '(sexp object)}
+  {"one" 1
+   "meta" 'this
+   "code" '(sexp object)}
 
-    "identity"
-    (is nil nil) true
-    (is true true) true
-    (is false false) true
-    (is true false) false
-    (is nil false) false
+  "identity"
+  (is nil nil) true
+  (is true true) true
+  (is false false) true
+  (is true false) false
+  (is nil false) false
 
-    "booleans"
-    ;;   (and true true true) true
-    ;;   (and true true false) false
-    (and false true) false
-    (and false false) false
-      ;; other arities
+  "booleans"
+  ;;   (and true true true) true
+  ;;   (and true true false) false
+  (and false true) false
+  (and false false) false;; other arities
 
-    ;;   (or true true) true
-    ;;   (or true false) true
-    ;;   (or false true) true
-    ;;   (or false false) false
+  ;;   (or true true) true
+  ;;   (or true false) true
+  ;;   (or false true) true
+  ;;   (or false false) false
 
-      ;; nand 
-      ;; xor
+  ;; nand 
+  ;; xor
 
-    "arithmetic"
-    (+ 34 6) 40
-    (- 34 34) 0
-    (- 34) -34
-    (- 0 34) -34
-    (* 3 4 5 4) 240
-    (% 2 3) 1
-    (% 65 213432) 37
-    (- 32423 5345 (* 324 32 (+ 323 2 23) 432 3 4234)) -19798399669818
+  "arithmetic"
+  (+ 34 6) 40
+  (- 34 34) 0
+  (- 34) -34
+  (- 0 34) -34
+  (* 3 4 5 4) 240
+  (% 2 3) 1
+  (% 65 213432) 37
+  (- 32423 5345 (* 324 32 (+ 323 2 23) 432 3 4234)) -19798399669818
 
-    "=INTEROP="
-    "dot form"
-    '(.inc this) '(get-attr "inc" this))
-      ;;  (do
-      ;;    ((fn []
-      ;;       (def b 60)
-      ;;       b))
-      ;;    b) ;; catch unresolved symbol error
-      ;;  (do
-      ;;    (do (def c "text"))
-      ;;    c) nil ;; catch unresolved symbol error
-       ;; calling with the wrong amount of arguments throws an error
+  "=INTEROP="
+  "dot form"
+  '(.inc this) '(get-attr "inc" this))
+  ;;  (do
+  ;;    ((fn []
+  ;;       (def b 60)
+  ;;       b))
+  ;;    b) ;; catch unresolved symbol error
+  ;;  (do
+  ;;    (do (def c "text"))
+  ;;    c) nil ;; catch unresolved symbol error
+  ;; calling with the wrong amount of arguments throws an error
 
-  ;; TODO address the symbol resolution bugs
-  ;;
+;; TODO address the symbol resolution bugs
 
+(tests "sequences"
 
-  (tests "sequences"
+  "basic sequence fns"
+  (first '(1 2)) 1
+  (first [3 4]) 3
+  ;; (first []) nil
 
-    "basic sequence fns"
-    (first '(1 2)) 1
-    (first [3 4]) 3
-    ;; (first []) nil
+  (rest [1 2 3]) [2 3]
+  (rest (t 1 2 3)) (t 2 3)
+  (rest []) []
 
-    (rest [1 2 3]) [2 3]
-    (rest (t 1 2 3)) (t 2 3)
-    (rest []) []
+  (next [1 2 3]) [2 3]
+  (next []) nil
+  (nnext [1]) nil
 
-    (next [1 2 3]) [2 3]
-    (next []) nil
-    (nnext [1]) nil
+  (seq nil) nil
+  (seq []) nil
+  (seq {"name" identity}) [(t "name" identity)]
+  (seq [1 2 3]) [1 2 3]
 
-    (seq nil) nil
-    (seq []) nil
-    (seq {"name" identity}) [(t "name" identity)]
-    (seq [1 2 3]) [1 2 3]
+  "map"
+  (map inc [1 2 3]) [2 3 4]
+  (map dec [1 2 3]) [0 1 2]
+  (hash-map
+   (map
+    (fn [tup] (t (inc (first tup)) (inc (second tup))))
+    {1 1
+     2 2
+     3 3})) {2 2
+             3 3
+             4 4}
 
-    "map"
-    (map inc [1 2 3]) [2 3 4]
-    (map dec [1 2 3]) [0 1 2]
+  (hash-map
+   (map
+    (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup))))
+    (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")))
+  {"op" "eval"   "code" "*ns*"   "id" "1"}
 
-    "filter"
-    (filter even? [1 2 3 4 5]) [2 4]
-    (filter odd? [1 2 3 4 5]) [1 3 5])
+  (->> (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")
+       (map
+        (partial map (partial .decode "utf-8")))
+      ;;  (map (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup)))))
+       hash-map)
+  {"op" "eval"   "code" "*ns*"   "id" "1"}
 
-  (tests "threading macros"
+  (hash-map (t (map inc (t 1 1)))) {2 2} ;; can map over a tuple and that returns a Vector
 
-    ;; (macroexpand (-> 3 inc)) '(inc 3)
-    ;; (macroexpand (-> 3 (inc))) '(inc 3)
+  ;; transforming a map into a seq
+  (seq (py/eval "{'op': 'eval', 'code': '*ns*', 'id': '1'}"))
+  [(t "op" "eval") (t "code" "*ns*") (t "id" "1")]
 
-    (pme (-> 3
-             (+ 1 2)
-             (inc))) nil)
+  "filter"
+  (filter even? [1 2 3 4 5]) [2 4]
+  (filter odd? [1 2 3 4 5]) [1 3 5])
+
+(tests "threading macros"
+
+  (macroexpand (-> 3 inc)) '(inc 3)
+  (macroexpand (-> 3 (inc))) '(inc 3)
+  (macroexpand (-> 3 inc inc)) '(inc (inc 3))
+  ;; the following is nonsense but serves as an example
+  (macroexpand (-> [1 2 3]
+                   (map inc)
+                   (filter odd?))) '(filter
+                                     (map [1 2 3] inc) odd?)
+  (macroexpand (->> [1 2 3]
+                    (map inc)
+                    (filter odd?))) '(filter odd?
+                                             (map inc [1 2 3]))
+  (->> [1 2 3]
+       (map inc)
+       (filter odd?)) [3]
+  (macroexpand (-> 3
+           (+ 1 2)
+           (inc))) '(inc (+ 3 1 2))
+  (-> 3
+      (+ 1 2)
+      (inc)) 7)
 
 ;; BUG
 ;;   (defmacro m [arg]
@@ -211,42 +257,66 @@
 ;;     (test "filter"
 ;;       (filter is-odd [1 2 3 23 4324 345 354]) [1 3 23 345]))
 
-  (tests "combinators"
-    "identity"
-    (identity 3) 3
-    (identity {:some "values"}) {"some" "values"}
+(tests "combinators"
+  "identity"
+  (identity 3) 3
+  (identity {:some "values"}) {"some" "values"}
 
-    "apply"
-    (apply add3 [3]) 6
-    (apply not [true]) false
-    (apply + 1 2 3 [23 234 23 53]) 339
-    (apply = 1 [(+ 0 1)]) true
-    (apply = 1 [(+ 0 4)]) false
+  "apply"
+  (apply add3 [3]) 6
+  (apply not [true]) false
+  (apply + 1 2 3 [23 234 23 53]) 339
+  (apply = 1 [(+ 0 1)]) true
+  (apply = 1 [(+ 0 4)]) false
 
-    "compose"
-    ((compose) "should return unchanged value") "should return unchanged value"
-    ((compose +) 1 2 3) (+ 1 2 3)
-    ((compose not =) 1 1) (not (= 1 1))
-    ((compose add3 +) 1 1) 5
+  "compose"
+  ((compose) "should return unchanged value") "should return unchanged value"
+  ((compose +) 1 2 3) (+ 1 2 3)
+  ((compose not =) 1 1) (not (= 1 1))
+  ((compose add3 +) 1 1) 5
 
-    "partial"
-    ((partial + 1) 10) 11
-    ((partial - 10) 100) -90
+  "partial"
+  ((partial + 1) 10) 11
+  ((partial - 10) 100) -90)
+
+  ;; (tests "keyword arguments"
+
+  ;;   "Function metadata"
+  ;;   (do (pme (defn my-func []
+  ;;         :doc "documentation"
+  ;;         (* 1 2)))
+  ;;       (print (get-attr "meta" my-func)))
+  ;;   0)
+
+  ;; (tests "metadata"
+  ;;   (get (fn []
+  ;;     :meta 1
+  ;;     "return-value")) 1)
+
+  (tests "Multimethods"
+    (defmulti mymulti identity) nil
+    (defmethod mymulti "match"
+      [v] "match") nil
+    (defmethod mymulti "default"
+      [v] "default") nil
+
+    (mymulti "match") "match"
+    (mymulti "other") "default" ;; is expected to fall back to the default
+
+    (defmulti mul *) nil ;; or equivalently just *
+    (defmethod mul 0
+      [& args] 0) nil
+    (defmethod mul 10
+      [& args] 10) nil
+    (defmethod mul "default"
+      [& args] nil) nil
+
+    (mul 10 0) 0
+    (mul 0 0) 0
+    (mul 10 1) 10
+    (mul 5 2 1) 10
+    (mul 10 5) nil
     )
-
-;;   (tests "keyword arguments"
-
-;;     "Function metadata"
-;;     (do (pme (defn my-func []
-;;           :doc "documentation"
-;;           (* 1 2)))
-;;         (print (get-attr "meta" my-func)))
-;;     0)
-
-;;   (tests "metadata"
-;;     (get (fn []
-;;       :meta 1
-;;       "return-value")) 1)
 
   (tests "try-catch-finally"
 
@@ -275,53 +345,63 @@
       (* 3 4)
       :catch 5) 12)
 
-  (tests "interoperability"
-    "eval"
-    1 1
+(tests "interoperability"
+  "eval"
+  1 1
 
-    "exec"
-    1 1
+  "exec"
+  1 1
 
-    "accessing built-in objects such as functions"
-    (py/len [1 2 3]) 3
-    (py/abs -300) 300
-    (type (py/float 1)) py/float
-    (py/eval "1 + 2") 3
+  "accessing built-in objects such as functions"
+  (py/len [1 2 3]) 3
+  (py/abs -300) 300
+  (type (py/float 1)) py/float
+  (py/eval "1 + 2") 3
 
-    "calling methods on objects"
-    (.append 3 []) [3]
-    ;; (do (def c [3 4 45 3 23 1])
-    ;;     (.sort c)
-    ;;     c) [1 3 3 4 23 45]
+  "calling methods on objects"
+  (.append 3 []) [3]
+  ;; (do (def c [3 4 45 3 23 1])
+  ;;     (.sort c)
+  ;;     c) [1 3 3 4 23 45]
 
-    ;; (py/dir [1 2 3]) {}
-    )
-  
-  (tests "metaprogramming"
+  ;; (py/dir [1 2 3]) {}
+  )
 
-    ;; ::passing
-    "sexp equality testing"
-    '() (sexp) ; both methods are equivalent
+(tests "metaprogramming"
 
-    "quoting"
-    '() (quote ())
+  "read"
+  (read-string "(* 2 3)") '(* 2 3)
+  (read-string "(* 2 3) nil") '(* 2 3)
+  (read-string "(* 2 (map inc [1 2 3])) nil") '(* 2 (map inc [1 2 3]))
 
-    "quasiquoting and its expansion"
-    `(1 2 3) (quote (1 2 3))
-    `(1 2 3 ~(+ 2 2)) '(1 2 3 4)
-    `(1 2 3 ~@[1 2 3]) '(1 2 3 1 2 3)
+  "eval"
+  (eval '(* 2 3)) 6
+  (let [a 20]
+    (eval 'a)) 20
 
-    "compatibility of quasiquoting with named parameters"
-    `(1 2 3 :named 2) '(1 2 3 :named 2)
-    `(1 2 3 ~@(sexp :named "value")) '(1 2 3 4 :named "value")
+  ;; ::passing
+  "sexp equality testing"
+  '() (sexp) ; both methods are equivalent
 
-    "named parameters in vectors"
-    [:named 3 :other 3] [:named 3 :other 3]
+  "quoting"
+  '() (quote ())
 
-    ;; ::failing
-    ;; '() (sexp 1)
-    ;; `(1 2 3 :named 2) '(1 2 3 :named 4)
+  "quasiquoting and its expansion"
+  `(1 2 3) (quote (1 2 3))
+  `(1 2 3 ~(+ 2 2)) '(1 2 3 4)
+  `(1 2 3 ~@[1 2 3]) '(1 2 3 1 2 3)
 
-    ;; (prepend-sexp '(hello this :something val) '(:something value))
-    ;; (:name) -> throws
-    ))
+  "compatibility of quasiquoting with named parameters"
+  `(1 2 3 :named 2) '(1 2 3 :named 2)
+  `(1 2 3 ~@(sexp :named "value")) '(1 2 3 4 :named "value")
+
+  "named parameters in vectors"
+  [:named 3 :other 3] [:named 3 :other 3]
+
+  ;; ::failing
+  ;; '() (sexp 1)
+  ;; `(1 2 3 :named 2) '(1 2 3 :named 4)
+
+  ;; (prepend-sexp '(hello this :something val) '(:something value))
+  ;; (:name) -> throws
+  )

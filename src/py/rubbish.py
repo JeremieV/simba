@@ -142,12 +142,13 @@
 #         # when you encounter recur, call next
 #         # at the end, call break
 
-import collections.abc
-import pyrsistent
-import toolz
-
-data = pyrsistent.pmap({'one': 1, 'two': 2, 'three': 3, 'four': 4})
-
-print(data.items())
-
 # print(isinstance(pyrsistent.pvector([1, 2, 3]), collections.abc.Sequence))
+
+a = {b'op': b'eval', b'code': b'*ns*', b'id': b'1'}
+print(type(b'op'))
+
+print(isinstance(b'op', bytes))
+# print(a.items())
+
+# https://python-ast-explorer.com/
+# https://github.com/octoml/synr

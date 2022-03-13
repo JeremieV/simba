@@ -16,3 +16,5 @@ readerObj = helpers.read_string_eager()
 
 print(ast.dump(ast.parse('from y import x,y,z'), indent=4))
 
+# https://python-ast-explorer.com/
+# https://github.com/octoml/synr

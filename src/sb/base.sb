@@ -1,336 +1,357 @@
 (ns base
   :doc "Collection of functions and macros to be included by default with the Simba language."
   :date-created "27 January 2022"
-  :author "Jérémie Vaney"
+  :author "Jérémie Vaney")
 
-  ;; CONTROL FLOW
+"I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."
 
-  (def defn
-    :doc "Shorthand for defining functions.
-          The metadata is not yet preserved as it should, because the implementation cannot yet handle named parameters."
-    ;; notes on multiple dispatch: the multiple dispatch mechanism should be like the one
-    ;; in Julia, with dispatch based on arity, type, and the option for optional and keyword arguments,
-    ;; with the optional ability to dispatch on an arbitrary function
-    (fn [name & body]
-      :macro true
-      `(def ~name
-         (fn ~@body
-           :name '(str name))))) ;; the keyword works here BUT the argument is evaluated
+;; CONTROL FLOW
 
-  (def defmacro
-    (fn [name args & expr]
-      :macro true
-      `(def ~name
-         (fn ~args :macro true ~@expr))))
+(def defn
+  :doc "Shorthand for defining functions.
+        The metadata is not yet preserved as it should."
+  (fn [name & body]
+    :macro true
+    `(def ~name
+       (fn ~@body
+         :name '(str name))))) ;; the keyword works here BUT the argument is evaluated
 
-  (defmacro is-assigned? [var]
-    :doc "Returns true if the variable has a binding in the current environment, else false."
-    `(try ~var true
-          :catch false))
+(def defmacro
+  (fn [name args & expr]
+    :macro true
+    `(def ~name
+       (fn ~args :macro true ~@expr))))
 
-  (defmacro defn [name & body]
-    :doc "Defines a function."
-    `(if (is-assigned? ~name)
-       (.register (fn ~@body) ~name)
-       (def ~name (fn ~@body))))
+(defmacro is-assigned? [var]
+  :doc "Returns true if the variable has a binding in the current environment, else false."
+  `(try ~var true
+        :catch false))
 
-  ;; (defmacro let [bindings & forms]
-  ;;   `(fn []))
+;; (defmacro defn [name & body]
+;;   :doc "Defines a function."
+;;   `(if (is-assigned? ~name)
+;;      (.register (fn ~@body) ~name)
+;;      (def ~name (fn ~@body))))
 
-  (defmacro comment [& body]
-    nil)
+(defmacro comment [& body]
+  nil)
 
-  (defmacro when [condition & clauses]
-    :doc "Evaluates test. If logical true, evaluates body in an implicit do."
-    `(if ~condition
-       (do ~@clauses)
-       nil))
+(defmacro when [condition & clauses]
+  :doc "Evaluates test. If logical true, evaluates body in an implicit do."
+  `(if ~condition
+     (do ~@clauses)
+     nil))
 
-  (defmacro when-not [condition & clauses]
-    :doc "Evaluates test. If logical false, evaluates body in an implicit do."
-    `(if ~condition
-       nil
-       (do ~@clauses)))
+(defmacro when-not [condition & clauses]
+  :doc "Evaluates test. If logical false, evaluates body in an implicit do."
+  `(if ~condition
+     nil
+     (do ~@clauses)))
 
-  (defmacro cond [& clauses :else nil]
-    (when clauses
-      (sexp 'if (first clauses)
-            (if (rest clauses)
-              (second clauses)
-              (throw (exception "`cond` requires an even number of forms")))
-            (prepend-sexp 'cond (rest (rest clauses))))))
+(defmacro cond [& clauses :else nil]
+  (when clauses
+    (sexp 'if (first clauses)
+          (if (rest clauses)
+            (second clauses)
+            (throw (exception "`cond` requires an even number of forms")))
+          (prepend-sexp 'cond (rest (rest clauses))))))
 
-  (defmacro assign [name value]
-    :doc "Shorthand to return a value after defining it.
-          Analog of the Python 'walrus' operator."
-    `(do (def ~name ~value) ~name))
+(defmacro with [resource & exprs]
+  `(let ~resource
+     ~@exprs
+     (.close ~(first resource))))
 
-  (defmacro import [module-name]
-    :doc "Like require, but imports a Python module instead."
-    `(def ~module-name
-       (py-exec ~(+ "import " (str module-name) "; " (str module-name)))))
+(defmacro while [condition & body]
+  :doc "EXTREMELY slow implementation of while. In the absence of a loop/recur concept, hard to do right."
+  :example '(do (def counter 10000)
+                (while (not (zero? counter))
+                  (def counter (dec counter)))
+                (print counter))
+  `(when ~condition
+     ~@body
+     (while ~condition ~@body)))
 
-  (import base_functions)
-  (import toolz)
+(defmacro assign [name value]
+  :doc "Shorthand to return a value after defining it.
+        Analog of the Python 'walrus' operator."
+  `(do (def ~name ~value) ~name))
 
-  (defmacro assert-args [& pairs]
-    :private true
-    :doc "Used to assert that certain macros are called correctly."
-    `(do (when-not ~(first pairs)
-           (throw (py/IllegalArgumentException
-                   (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
-         ~(let [more (nnext pairs)]
-            (when more
-              (vector `assert-args more)))))
+(defmacro import [module-name]
+  :doc "Like require, but imports a Python module instead."
+  `(def ~module-name
+     (py-exec ~(+ "import " (str module-name) "; " (str module-name)))))
 
-  ;; MULTIMETHODS
+;; MULTIMETHODS
 
-  ;; (defmacro defmethod [name args & body]
-  ;;   `(if (defined ~name)
-  ;;      (register
-  ;;       (fn ~args
-  ;;         ;; :name ~name
-  ;;         ~@body))))
+(defmacro defmulti [name dispatch-fn]
+  `(def ~name (py/MultiFn ~(str name) ~dispatch-fn)))
 
-  (defn inc [n]
-    (+ n 1))
+(defmacro defmethod [multi dispatch-val & body]
+  `(.register (fn ~@body) ~dispatch-val ~multi))
 
-  (defn dec [n]
-    (- n 1))
+;; ---
 
-  ;; TYPES
+(import base_functions)
+(import toolz)
 
-  (defn vector? [x]
-    (instance? x Vector))
+(defmacro assert-args [& pairs]
+  :private true
+  :doc "Used to assert that certain macros are called correctly."
+  `(do (when-not ~(first pairs)
+         (throw (py/IllegalArgumentException
+                 (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
+       ~(let [more (nnext pairs)]
+          (when more
+            (vector `assert-args more)))))
 
-  (defn map? [x]
-    (instance? x HashMap))
+(defn inc [n]
+  (+ n 1))
 
-  (defn sexp? [x]
-    (instance? x sexp))
+(defn dec [n]
+  (- n 1))
 
-  ;; SEQUENCES
+;; TYPES
 
-  (def seq base_functions/sb_seq)
+(defn vector? [x]
+  (instance? x Vector))
 
-  (defn empty [s]
-    :doc "Returns an empty sequence of the type of s."
-    (cond
-      (vector? s) []
-      (map? s) {}
-      true ((type s))))
+(defn map? [x]
+  (instance? x HashMap))
 
-  (defn cons [a b]
-    (concat [a] b))
+(defn sexp? [x]
+  (instance? x sexp))
 
-  (defn first [s]
-    (at 0 s))
+;; SEQUENCES
 
-  (defn rest [s]
-    (if (seq s)
-      (between 1 nil s)
-      (empty s)))
+(def seq base_functions/sb_seq)
 
-  (defn rrest [s]
-    (rest (rest s)))
+(def freeze py/p.freeze)
+(def thaw py/p.thaw)
 
-  (defn next [s]
-    :doc "next is like rest except that it returns nil on an empty seq"
-    (if (seq s)
-      (between 1 nil s)
-      nil))
+(defn empty [s]
+  :doc "Returns an empty sequence of the type of s."
+  (cond
+    (vector? s) []
+    (map? s) {}
+    true ((type s))))
 
-  (defn nnext [s]
-    (next (next s)))
+(defn cons [a b]
+  (concat [a] b))
 
-  (defn second [s]
-    (first (rest s)))
+(defn first [s]
+  (at 0 s))
 
-  (defn take [n s]
-    (between 0 n s))
+(defn rest [s]
+  (if (seq s)
+    (between 1 nil s)
+    (empty s)))
 
-  (defn take-last [n s]
-    (between (- n) nil s))
+(defn rrest [s]
+  (rest (rest s)))
 
-  ;; COMBINATORS
+(defn next [s]
+  :doc "next is like rest except that it returns nil on an empty seq"
+  (if (seq s)
+    (between 1 nil s)
+    nil))
 
-  (def apply
-    :doc "Function application. Returns the result of applying f to the last argument, which has to be a sequence. Any arguments before the last are prepended to the sequence."
-    :signature '[f & args]
-    base_functions/sb_apply)
+(defn nnext [s]
+  (next (next s)))
 
-  (defn identity [x]
-    :doc "Returns its argument."
-    x)
+(defn second [s]
+  (first (rest s)))
 
-  (def thrush (fn [a b] (b a)))
+(defn take [n s]
+  (between 0 n s))
 
-  (defn compose
-    :doc "An extended version of the bluebird combinator."
-    ([] identity)
-    ([f] f)
-    ([f g] (fn [& args]
-             (f (apply g args)))))
-  
-  (defn partial
-    :doc "Takes a function with fewer args than normal, and returns a function that takes a variable amount of additional args. When called, the returned function calls f with args + additional args."
-    ([f] f)
-    ([f & args] (fn [& more-args]
-                  (apply f (concat args more-args)))))
+(defn take-last [n s]
+  (between (- n) nil s))
 
-  ;; REDUCERS AND TRANSDUCERS
+;; COMBINATORS
 
-  ;; PREDICATES
+(def apply
+  :doc "Function application. Returns the result of applying f to the last argument, which has to be a sequence. Any arguments before the last are prepended to the sequence."
+  :signature '[f & args]
+  base_functions/sb_apply)
 
-  (defn nil? [value]
-    (is nil value))
+(defn identity [x]
+  :doc "Returns its argument."
+  x)
 
-  (defn zero? [value]
-    (= 0 value))
+(def thrush (fn [a b] (b a)))
 
-  (defn complement [predicate]
-    :alternative-implementation '(compose not predicate)
-    (fn [& args] (not (apply predicate args))))
+(defn compose
+  :doc "An extended version of the bluebird combinator."
+  ([] identity)
+  ([f] f)
+  ([f g] (fn [& args]
+           (f (apply g args)))))
 
-  (defn not= [a b]
-    (not (= a b)))
+(defn partial
+  :doc "Takes a function with fewer args than normal, and returns a function that takes a variable amount of additional args. When called, the returned function calls f with args + additional args."
+  ([f] f)
+  ([f & args] (fn [& more-args]
+                (apply f (concat args more-args)))))
 
-  (defn empty? [coll]
-    (= 0 (count coll)))
+;; REDUCERS AND TRANSDUCERS
 
-  (defn even? [n]
-    (= (% 2 n) 0))
+;; PREDICATES
 
-  (defn odd? [n]
-    (= (% 2 n) 1))
+(defn nil? [value]
+  (is nil value))
 
-  (defn pos? [n]
-    (< 0 n))
+(defn zero? [value]
+  (= 0 value))
 
-  (defn neg? [n]
-    (< n 0))
+(defn complement [predicate]
+  :alternative-implementation '(compose not predicate)
+  (fn [& args] (not (apply predicate args))))
 
-  ; or and and implemented as macros
+(defn not= [a b]
+  (not (= a b)))
 
-  (defmacro or [& clauses]
-    ;; or is the disjunction operator
-    ;; the empty disjunction is false by convention
-    (cond (is-empty clauses) false
-          (= 1 (count clauses)) (first clauses)
-          true `(do (def cl ~(first clauses))
-                    (if cl cl (or ~@(rest clauses))))))
+(defn empty? [coll]
+  (= 0 (count coll)))
 
-  ;; (defmacro and [& clauses]
-  ;;   ;; by convention the empty conjuntion is true
-  ;;   (sexp))
+(defn even? [n]
+  (= (% 2 n) 0))
 
-  ;; SEQUENCES
+(defn odd? [n]
+  (= (% 2 n) 1))
 
-  (defn map [f coll]
-    :doc "Maps a function over a collection eagerly. It would be nice if it could be lazy.
+(defn pos? [n]
+  (< 0 n))
+
+(defn neg? [n]
+  (< n 0))
+
+; or and and implemented as macros
+
+(defmacro or [& clauses]
+  :doc "the empty disjunction is false by convention"
+  (cond (is-empty clauses) false
+        (= 1 (count clauses)) (first clauses)
+        true `(do (def cl ~(first clauses))
+                  (if cl cl (or ~@(rest clauses))))))
+
+;; (defmacro and [& clauses]
+;;   ;; by convention the empty conjuntion is true
+;;   (sexp))
+
+;; SEQUENCES
+
+(defn map [f coll]
+  :doc "Maps a function over a collection eagerly. It would be nice if it could be lazy.
           Calls seq on its coll.
           Also there is the possibility of making it a transducer."
-    (let [s (seq coll)]
-      (when s
-        (cons (f (first s)) (map f (rest s))))))
+  (let [s (seq coll)]
+    (when s
+      (cons (f (first s)) (map f (rest s))))))
 
-  (defn filter [pred coll]
-    :doc "Filters over a collection eagerly. Calls seq on its argument."
-    (let [s (seq coll)]
-      (when s
-        (let [f (first s)
-              r (rest s)]
-          (if (pred f)
-            (cons f (filter pred r))
-            (filter pred r))))))
-  
-  (defn reduce [] nil)
+(defn filter [pred coll]
+  :doc "Filters over a collection eagerly. Calls seq on its argument."
+  (let [s (seq coll)]
+    (when s
+      (let [f (first s)
+            r (rest s)]
+        (if (pred f)
+          (cons f (filter pred r))
+          (filter pred r))))))
 
-  ;; (defn take)
+(defn reduce [] nil)
+;; (defn reduce [f coll initial])
 
-  (comment
-    ;; a way of making a mapping transducer
-    ([f]
-     (fn [rf]
-       (fn
-         ([] (rf))
-         ([result] (rf result))
-         ([result input]
-          (rf result (f input)))
-         ([result input & inputs]
-          (rf result (apply f input inputs)))))))
+;; (defn take)
 
-  ;; (defn reduce [f coll initial])
+;; (defn partition)
 
-  ;; (defn odds [])
-  ;; (defn evens [seq]
-  ;;   ;; from a sequence, returns a sequence containing all of its elements with pair indexes
-  ;;   ;; without losing order
-  ;;   (def new-seq (empty seq))
-  ;;   (when seq
-  ;;     (append (first seq) new-seq)))
+(defn remove [pred coll]
+  :doc "Removes the items that satisfy the predicate in coll"
+  (filter (complement pred) coll))
 
-  (defmacro -> [x & forms]
-    (if forms
-      (let [form (first forms)
-            threaded (if (sexp? form)
-                       `(~(first form) ~x ~@(next form))
-                       (sexp form x))]
-        (if (next forms)
-          `(-> ~threaded ~@(next forms))
-          threaded))
-      x))
+(comment
+  ;; a way of making a mapping transducer
+  ([f]
+   (fn [rf]
+     (fn
+       ([] (rf))
+       ([result] (rf result))
+       ([result input]
+        (rf result (f input)))
+       ([result input & inputs]
+        (rf result (apply f input inputs)))))))
 
-  ;; METAPROGRAMMING
 
-  (defmacro pme [expr]
-    :doc "short for 'print macro expansion'"
-    `(print
-      (macroexpand ~expr)))
+(defmacro -> [x & forms]
+  :doc "Thread-first macro."
+  (if forms
+    (let [form (first forms)
+          threaded (if (sexp? form)
+                     `(~(first form) ~x ~@(next form))
+                     (sexp form x))]
+      `(-> ~threaded ~@(next forms)))
+    x))
 
-  ;; TESTING
-  ;; the test library is baked into the base library, because it is so lightweight and performance is not a huge concern
+(defmacro ->> [x & forms]
+  :doc "Thread-last macro."
+  (if forms
+    (let [form (first forms)
+          threaded (if (sexp? form)
+                     `(~(first form) ~@(next form) ~x)
+                     (sexp form x))]
+      `(->> ~threaded ~@(next forms)))
+    x))
 
-  (def *tests-have-failed* false)
+;; METAPROGRAMMING
 
-  (defn single-test [name test result]
-    (when (not (= test result))
-      (def *tests-have-failed* true)
-      (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
+(def read-string
+  :args '[string]
+  :doc "Reads one object from the string."
+  py/read_string)
 
-  (defmacro test [& tests]
-    (if (instance? (first tests) str)
-      `(do (def *section-name* ~(first tests))
-           ~(when (rest tests)
-              `(test ~@(rest tests))))
-      `(do
-         (single-test *section-name* ~(first tests) ~(second tests))
-         ~(when (rrest tests)
-            `(test ~@(rrest tests))))))
+(defn eval [ds]
+  :doc "Evaluates a single form (not string)."
+  (py/eval_sexp ds *env*))
 
-  (defmacro tests [name & tests]
+(defmacro pme [expr]
+  :doc "short for 'print macro expansion'"
+  `(print
+    (macroexpand ~expr)))
+
+;; TESTING
+;; the test library is baked into the base library, because it is so lightweight and performance is not a huge concern
+
+(def *tests-have-failed* false)
+
+(defn single-test [name test result]
+  (when (not (= test result))
+    (def *tests-have-failed* true)
+    (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
+
+(defmacro test [& tests]
+  (if (instance? (first tests) str)
+    `(do (def *section-name* ~(first tests))
+         ~(when (rest tests)
+            `(test ~@(rest tests))))
     `(do
-       (def *section-name* ~name)
-       (prn "ℹ️ Testing `" ~name "`\n")
-       (test ~@tests)
-       (if *tests-have-failed*
-         (prn "❌ Tests completed with some failures. \n")
-         (prn "✅ Tests completed without failures. \n"))))
+       (single-test *section-name* ~(first tests) ~(second tests))
+       ~(when (rrest tests)
+          `(test ~@(rrest tests))))))
 
-  (defmacro time [& forms]
-    `(do (def t (date))
-         ~@forms
-         (- (date) t)))
+(defmacro tests [name & tests]
+  `(do
+     (def *section-name* ~name)
+     (prn "ℹ️ Testing `" ~name "`\n")
+     (test ~@tests)
+     (if *tests-have-failed*
+       (prn "❌ Tests completed with some failures. \n")
+       (prn "✅ Tests completed without failures. \n"))))
 
-  (defmacro pmt [& forms]
-    `(print (measure-time ~@forms)))
+(defmacro time [& forms]
+  `(do (def t (date))
+       ~@forms
+       (- (date) t)))
 
-  (comment "Various comments about the base library."
+(defmacro pmt [& forms]
+  `(print (measure-time ~@forms)))
 
-           "I have name resolution bugs, sometimes if a symbol is not found the interpreter will go into an infinite loop instead. Also, there are bugs when I try to namespace-qualify the symbols: it simply doesn't work."
-
-           (defmacro do [& expressions]
-             :doc "Serves as an example to show that `do` is easily defined in terms of only function application.
-          However for practical purposes `do` is included as a special form in the interpeter."
-             `((fn []
-                 ~@expressions)))))
