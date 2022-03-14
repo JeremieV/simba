@@ -43,14 +43,11 @@ xyz
   (do
     (def b (+ 5 (- 10 5)))
     b) 10
-  ;; a definition can bind multiple elements at once, if they are in a vector
-  (def [c 1 d 2]) nil
+  ;; do does not introduce a new scope
   (do
-    (def [e 10 f 30])
-    (+ e f)) 40
-  ;; (do (def [g (+ 50 (* 34 70))
-  ;;           h (- g 430)])
-  ;;     (py/toolz.cons h (py/toolz.cons g []))) [2430 2000]
+    (def e 10)
+    (def f 30)) nil
+  (+ e f) 40
   ;; TODO add cases that should throw errors
 
   "let"
@@ -61,7 +58,6 @@ xyz
   (let [a 1
         b 2]
     (let [a 3]
-        ;; (def a 4)
       (+ a b))) 5
 
   "closures"
@@ -376,8 +372,8 @@ xyz
 
   "eval"
   (eval '(* 2 3)) 6
-  (let [a 20]
-    (eval 'a)) 20
+  ;; (let [a 20]
+  ;;   (eval 'a)) 20
 
   ;; ::passing
   "sexp equality testing"

@@ -1,6 +1,9 @@
 env/
 *.DS_Store
 __pycache__
-.clj-kondo/
+.clj-kondo
 .lsp/
 formatting-settings.cljfmt.edn
+
+dist
+src/simba_lang.egg-info

@@ -1,5 +1,5 @@
 import re
-from simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword)
+from simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword, Namespace)
 import pyrsistent as p
 import pvectorc
 
@@ -166,6 +166,8 @@ def to_string(obj, indent=0, lb=True) -> str:
         return "true"
     elif obj is False:
         return "false"
+    elif isinstance(obj, Namespace):
+        return f"#namespace[{obj.name}]"
     else:
         # print(type(obj))
         return obj.__str__()

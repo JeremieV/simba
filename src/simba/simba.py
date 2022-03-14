@@ -1,15 +1,14 @@
 #! python3
-from copyreg import dispatch_table
 import sys, traceback
 from types import ModuleType
 from typing import Tuple, Union
+from importlib.resources import read_text
 
 import argparse
 from prompt_toolkit.shortcuts.prompt import PromptSession
 from prompt_toolkit.history import FileHistory
 
 import pyrsistent as p
-import toolz
 
 sys.path.insert(0, '.')
 
@@ -18,8 +17,7 @@ import sexprs_reader_printer
 import dotexprs_reader_printer
 from simba_types import *
 import helpers
-
-c_path = "/Users/jeremievaney/Desktop/language"
+import sb
 
 # _reader    = sexprs_reader_printer.SexpReader
 # _read_form  = sexprs_reader_printer.read_str
@@ -55,12 +53,10 @@ class Function:
     """Functions are anonymous, but may contain names in their metadata.
     Any Function can be promoted to a multimethod with the `register` method.
     """
-    def __init__(self, params, ast, bindings, r_args = {}):
-        # CHECK BUG WITH r_args DEFAULT VALUE
-        # if len(params) < 1 or params[0] != Symbol('vector'): raise SyntaxError("Function declaration was expecting a vector as the first argument.")
-        # if r_args: print(r_args)
+    def __init__(self, params, ast, bindings, _r_args = None):
         # positonalParams = pass
         # namedParams = pass
+        r_args = _r_args if _r_args is not None else {}
         self.args = params
         self.ast = ast
         self.guard = None if 'when' not in r_args else r_args['when']
@@ -98,6 +94,7 @@ def signature_match(signature:tuple, p_args:tuple, r_args:dict, guard: Union[Fun
     else:
         # TODO: for now the signature length does not take into account the keyword arguments or type signatures
         return len(p_args) == len(signature) and check_guard(guard, p_args, r_args)
+
 class Multi:
     """All functions can be promoted to multimethods.
     """
@@ -127,7 +124,8 @@ class Multi:
             if signature_match(tup[0], p_args, r_args, guard = tup[2]):
                 return tup[1](*p_args, **r_args)
         n = self.meta['name'] if 'name' in self.meta else ""
-        raise MultipleDispatchException(f"No matching signature for multimethod {n}", sexp, env, current_ns)
+        raise MultipleDispatchException(f"No matching signature for multimethod {n}")
+
 class MultiFn():
     """A multimethod. Dispatch is made according to the result of the dispatching function."""
     def __init__(self, name, dispatch_fn):
@@ -138,7 +136,7 @@ class MultiFn():
         return len(self.method_table)
     def register(self, fn, dispatch_value):
         if dispatch_value in self.method_table:
-            raise MultiMethodException(f"The dispatch value {print_sexp(dispatch_value)} is already registered for the multimethod {self.name}.", sexp, env, current_ns)
+            raise MultiMethodException(f"The dispatch value {print_sexp(dispatch_value)} is already registered for the multimethod {self.name}.")
         self.method_table[dispatch_value] = fn
     def methods(self):
         """Returns a list of the registered dispatch values on the multimethod."""
@@ -147,8 +145,6 @@ class MultiFn():
     #     dispatch_val = self.dispatch_fn()
     #     # if val not in dict dispatch to the default fn?
     #     return self.method_table[dispatch_val]()
-
-from base_functions import repl_env
 
 def convert(string, _from, to):
     return to.print_sexp(_from.read_sexp(string))
@@ -160,14 +156,13 @@ def convert(string, _from, to):
 def simba_repl(multi = False):
     """Command-line repl that executes everything in the base namespace by default."""
     eof = False
-    _env = Environment(names = repl_env)
-    loaded = {}
-    session = PromptSession(FileHistory('~/.simba_history'))
+    prompt_session = PromptSession(FileHistory('~/.simba_history'))
     # load the standard library
-    eval_sexp(helpers.read_files(_reader, [f'{c_path}/src/sb/base.sb']), _env)
+    _env = Namespace()
+    eval_sexp(SymbolicExpression(Symbol('ns'), Symbol('repl')), _env)
     while not eof:
         try:
-            line = session.prompt('>>> ', multiline=multi)
+            line = prompt_session.prompt('>>> ', multiline=multi)
             readerObj = _reader.SexpReader(line)
             while readerObj.position < len(readerObj.tokens):
                 e = readerObj.read_form()
@@ -231,18 +226,15 @@ def macroexpand(ast, env):
     return ast
 
 loaded_ns = {}
-current_ns = None
-    
+
 def require(ns_names, env, include = False):
     """Side effecting function that requires a namespace such that it is accessible in the current namespace (if namespace-qualified)."""
-    # MAYBE THE NAMESPACE SHOULD ALWAYS HAVE ITSELF AS A PARENT NAMESPACE? THIS WAY I RESOLVE THE SELF-QUALIFYING PROBLEM
     global loaded_ns
-    global current_ns
     for n in ns_names:
         if n not in loaded_ns:
-            n_cache = current_ns
+            env_cache = env
             # creates a new environment for the new namespace
-            ns_env = Environment(names = repl_env)
+            ns_env = Namespace(name = n)
             # evaluates the content of that namespace in the new environment
             # here the ns form will change the *ns*
             for exp in helpers.return_ns(n, program_ast):
@@ -250,14 +242,13 @@ def require(ns_names, env, include = False):
             # add the new namespace environment to the list of loaded namespaces
             loaded_ns[n] = ns_env
             # add the environment to the list of contextual namespaces
-            if include: env.include_ns(n, loaded_ns[n])
-            else:       env.require_ns(n, loaded_ns[n])
+            if include: env.include_ns(loaded_ns[n])
+            else:       env.require_ns(loaded_ns[n])
             # here we must change the *ns* back
-            current_ns = n_cache
+            env = env_cache
         else:
-            if include: env.include_ns(n, loaded_ns[n])
-            else:       env.require_ns(n, loaded_ns[n])
-        # print(env.referred)
+            if include: env.include_ns(loaded_ns[n])
+            else:       env.require_ns(loaded_ns[n])
 
 def eval_primitive(sexp, env):
     """This function is charged of evaluating anything that is not a SymbolicExpression.
@@ -265,10 +256,9 @@ def eval_primitive(sexp, env):
     This distinction is made so that it is feasible to implement Tail Call Optimization
     on Symbolic Expression evaluation.
     """
-    global current_ns
     if isinstance(sexp, Symbol): # if symbol evaluate to its binding
         if sexp.name == "*ns*":
-            return current_ns
+            return env.ns
         elif sexp.name == "*env*":
             return env
         if sexp.namespace:
@@ -282,7 +272,7 @@ def eval_primitive(sexp, env):
             except UnresolvedSymbolError:
                 pass # do nothing
         try: return env.get(sexp)
-        except KeyError: raise UnresolvedSymbolError(sexp, sexp, env, current_ns)
+        except KeyError: raise UnresolvedSymbolError(sexp)
     elif isinstance(sexp, Vector):
         return p.pvector([eval_sexp(e, env) for e in sexp])
     elif isinstance(sexp, Map):
@@ -297,7 +287,6 @@ def eval_sexp(sexp, env):
     By default, execution starts in the `None` namespace, which corresponds to the standard library.
     """
     global loaded_ns
-    global current_ns
     while True:
         # print(sexp)
         if not isinstance(sexp, SymbolicExpression):
@@ -318,27 +307,20 @@ def eval_sexp(sexp, env):
         head = sexp.positional[0]
         is_s = isinstance(head, Symbol)
         if is_s and "def" == head.name:
-            ## def adds a binding (from unevaluated first arg to evaled second arg) in the environment ##
-            if len(sexp.positional) < 3 and not isinstance(sexp.positional[1], Vector):
-                raise SimbaSyntaxError("`def` statement has invalid argument pattern", sexp, env, current_ns)
-            a1 = sexp.positional[1]
-            if isinstance(a1, Vector):
-                for name, value in zip(a1[0::2], a1[1::2]):
-                    res = eval_sexp(value, env)
-                    env.set(name, res)
-                return None
-            else:
-                a2 = sexp.positional[2]
-                res = eval_sexp(a2, env)
-                return env.set(a1, res)
+            if len(sexp.positional) < 3:
+                raise SimbaSyntaxError(f"\n\t`def` statement has invalid argument pattern in:\n\t{print_sexp(sexp)}")
+            _name = sexp.positional[1]
+            _val = sexp.positional[2]
+            _res = eval_sexp(_val, env)
+            return env.ns.set(_name, _res)
         elif is_s and "quote" == head.name:
-            if len(sexp.positional) != 2: raise SimbaSyntaxError("`quote` expected 1 argument", sexp, env, current_ns)
+            if len(sexp.positional) != 2: raise SimbaSyntaxError(f"\n\t`quote` expected 1 argument in:\n\t{print_sexp(sexp)}")
             return sexp.positional[1]
         elif is_s and "if" == head.name:
             if len(sexp.positional) < 3:
-                raise SimbaSyntaxError("Too few arguments to if", sexp, env, current_ns)
+                raise SimbaSyntaxError(f"\n\tToo few arguments to if in:\n\t{print_sexp(sexp)}")
             if len(sexp.positional) > 4:
-                raise SimbaSyntaxError("Too many arguments to if", sexp, env, current_ns)
+                raise SimbaSyntaxError(f"\n\tToo many arguments to if in:\n\t{print_sexp(sexp)}")
             cond, then = sexp.positional[1:3]
             evaled_cond = eval_sexp(cond, env)
             if evaled_cond:
@@ -378,12 +360,11 @@ def eval_sexp(sexp, env):
         elif is_s and "let" == head.name:
             # creates a new environment and binds the values to it successively (in order)
             # evaluates the body in an implicit do
-            if len(sexp.positional) == 2: raise SimbaSyntaxError("`let` form is missing a body.", sexp, env, current_ns)
+            if len(sexp.positional) == 2: raise SimbaSyntaxError(f"\n\t`let` form is missing a body in:\n\t{print_sexp(sexp)}")
             vec = sexp.positional[1]
             env = Environment(outer = env)
             for i in range(0, len(vec), 2):
                 env.set(vec[i], eval_sexp(vec[i+1], env))
-            # env.make_immutable()
             for exp in sexp[2:-1]:
                 eval_sexp(exp, env)
             sexp = sexp[-1]
@@ -421,24 +402,27 @@ def eval_sexp(sexp, env):
                     res = eval_sexp(exp, env)
                 return res
         elif is_s and "ns" == head.name:
-            ns_name = sexp.positional[1].name
-            # makes that env the new current namespace (*ns*)
-            current_ns = ns_name
-            # creates a new Environment if it does not yet exist
-            # and adds it to the list of environments
+            ns_name = sexp.positional[1].name                
             if ns_name not in loaded_ns:
-                ns_env = Environment(names = repl_env)
-                loaded_ns[ns_name] = ns_env
+                if env.ns.name == "":
+                    # it means the execution is not currently happening in an environment:
+                    # reuse the empty shell of an env here
+                    env.ns.name = ns_name
+                else:
+                    # create new Namespace if it does not yet exist
+                    env = Namespace(name = ns_name)
+                # add it to the list of loaded namespaces
+                loaded_ns[ns_name] = env
             # includes the base library and imports all classes from java.lang
-            require(['base'], env, include = True)
+            require(['base'], env.ns, include = True)
             # requires/refers other namespaces and vars as specified
             # dadi
             break
         elif is_s and "require" == head.name:
-            require([sexp.positional[1].name], env)
+            require([sexp.positional[1].name], env.ns)
             break
         elif is_s and "include" == head.name:
-            require([sexp.positional[1].name], env, include=True)
+            require([sexp.positional[1].name], env.ns, include=True)
             break
         elif is_s and "quasiquote" == head.name:
             sexp = quasiquote(sexp[1])
@@ -460,7 +444,7 @@ def eval_sexp(sexp, env):
                         fun = evaledPArgs[0] = tup[1]
                         matched = True
                         break
-                if not matched: raise MultipleDispatchException(f"No matching signature {evaledPArgs} for multimethod {sexp[0].name}", sexp, env, current_ns)
+                if not matched: raise MultipleDispatchException(f"No matching signature {evaledPArgs} for multimethod {sexp[0].name}")
             if isinstance(fun, MultiFn):
                 # evaluate the dispatch function
                 val = eval_sexp(SymbolicExpression(fun.dispatch_fn, *evaledPArgs[1:], **evaledRArgs), env)
@@ -469,7 +453,7 @@ def eval_sexp(sexp, env):
                     try:
                         fun = fun.method_table["default"]
                     except KeyError:
-                        raise MultipleDispatchException(f"Tried to fall back to the default method but no such method exists for {fun.name}.", sexp, env, current_ns)
+                        raise MultipleDispatchException(f"Tried to fall back to the default method but no such method exists for {fun.name}.")
                 else:
                     fun = fun.method_table[val]
             if isinstance(fun, Function):
@@ -479,7 +463,7 @@ def eval_sexp(sexp, env):
                 )
                 # first check the guard if there is a guard and the fn has not already been selected from a multi
                 if fun.guard and not matched and not eval_sexp(fun.guard, env):
-                    raise FailingGuardException('The guard condition is failing for the function.', sexp, env, current_ns)
+                    raise FailingGuardException('The guard condition is failing for the function.')
                 # if the body is empty return `nil`
                 if len(fun.ast) == 0:
                     return None
@@ -499,34 +483,38 @@ def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):
     
     The evaluation starts in the 'main' namespace. Every time a namespace is referred, that namespace the function looks for it in its
     AST representation of the program, and evaluates it if it is the first time it is referred."""
-    # base_env = Environment(names = repl_env)
-    # # evaluate the base namespace
-    # eval_sexp(, base_env)
     if run_tests:
         # get the test namespaces
         test_ns_list = helpers.return_test_ns(ast_list)
         # run them
         for ns in test_ns_list:
-            test_env = Environment(names = repl_env)
+            env = Namespace()
             for e in ns:
-                eval_sexp(e, test_env)
+                eval_sexp(e, env)
         return
     main = helpers.return_ns(main_namespace, ast_list)
+    env = Namespace()
     for e in main:
-        eval_sexp(e, Environment(names = repl_env))
+        eval_sexp(e, env)
 
-# when called with no arguments, the command is a terminal repl
-if __name__ == "__main__" and len(sys.argv) == 1:
-    simba_repl()
-# when called with the name of a file, will interpret that file
-elif __name__ == "__main__" and len(sys.argv) > 1:
-    parser = argparse.ArgumentParser(description="This is the Simba programming language tool. Call without arguments to start a command line repl, else the arguments specify the files to execute. At the REPL, press ALT+ENTER to submit.")
-    parser.add_argument("files", metavar="FILES", nargs='*')
-    parser.add_argument("--main", default="main", help="specify the namespace to start execution in (defaults to `main`)")
-    parser.add_argument("--run-tests", action='store_const', const=True, default=False, help="execute the tests, that is all the namespaces whose name ends in `-test`")
-    args = parser.parse_args()
+def main():
+    """Serves as an entrypoint for the script."""
+    global program_ast
+    base_lib = read_text(sb, 'base.sb')
+    # when called with no arguments, the command is a terminal repl
+    if len(sys.argv) == 1:
+        program_ast = helpers.read_string_eager(base_lib)
+        simba_repl()
+    # when called with the name of a file, will interpret that file
+    elif len(sys.argv) > 1:
+        parser = argparse.ArgumentParser(description="This is the Simba programming language tool. Call without arguments to start a command line repl, else the arguments specify the files to execute. At the REPL, press ALT+ENTER to submit.")
+        parser.add_argument("files", metavar="FILES", nargs='*')
+        parser.add_argument("--main", default="main", help="specify the namespace to start execution in (defaults to `main`)")
+        parser.add_argument("--run-tests", action='store_const', const=True, default=False, help="execute the tests, that is all the namespaces whose name ends in `-test`")
+        args = parser.parse_args()
 
-    # if not (args.files.contains('libraries') or args.files.contains('libraries/base.sb')):
-    #     args.files = args.files + ['libraries/base.sb']
-    program_ast = helpers.read_files(_reader, args.files) + helpers.read_files(_reader, [f'{c_path}/src/sb/base.sb'])
-    res = namespaced_eval(program_ast, args.run_tests, args.main)
+        program_ast = helpers.read_files(_reader, args.files) + helpers.read_string_eager(base_lib)
+        namespaced_eval(program_ast, args.run_tests, args.main)
+
+if __name__ == "__main__":
+    main()

@@ -46,6 +46,7 @@ def read_string_eager(string, reader = sexprs_reader_printer):
     while readerObj.position < len(readerObj.tokens):
         e = readerObj.read_form()
         ast_list.append(e)
+    return ast_list
 
 def read_string_form_by_form(reader, procedure, string):
     """Similar to read_files_form_by_form, useful for the REPL."""

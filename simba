@@ -1,4 +1,0 @@
-#! python3
-import os; import sys
-p = "/Users/jeremievaney/Desktop/language" # modify the path as you need
-os.system(f"source {p}/env/bin/activate; python {p}/src/py/simba.py {' '.join(sys.argv[1:])}; deactivate")
