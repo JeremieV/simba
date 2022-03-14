@@ -9,15 +9,14 @@ from math import prod
 from types import LambdaType
 
 import pyrsistent
-from simba_types import Map, Vector
-import helpers
-from simba_types import SymbolicExpression, Symbol
+from simba.simba_types import Map, Vector, SymbolicExpression, Symbol
+from simba.simba_exceptions import SimbaException
+import simba.helpers as helpers
 import time
 import toolz
 
 import collections.abc
 
-from simba_exceptions import SimbaException
 
 def sb_apply(fn, *args, **kwargs):
     """Function application. Conses all the arguments between the first and the last to the last.

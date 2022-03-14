@@ -3,8 +3,7 @@ The data types for the Simba interpreter.
 Many data types are declared as aliases for the benefit of being able to call isinstance() to determine type (Maybe this is a bad idea).
 """
 from re import split
-import helpers
-from simba_exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
+from simba.simba_exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
 import pyrsistent as p
 
 # Atomic Data Types
@@ -12,7 +11,7 @@ class Symbol:
     def __init__(self, string):
         split_str = split('/', string)
         if string == '/': self.name = '/'; self.namespace = None
-        elif len(split_str) > 2: raise SimbaSyntaxError(f"A symbol can only have one namespace qualifier (symbol `{symbol}`).")
+        elif len(split_str) > 2: raise SimbaSyntaxError(f"A symbol can only have one namespace qualifier (symbol `{string}`).")
         elif len(split_str) == 2:
             if split_str[0] == '' or split_str[1] == '': raise SimbaSyntaxError("None of the two members of the symbol should be empty.", string, None, None)
             self.namespace = split_str[0]
@@ -128,7 +127,7 @@ class Environment():
         if symbol.namespace: raise SimbaException(f"Illegal definition of the namespaced symbol `{symbol.namespace}/{symbol.name}` in a let statement.")
         self.names[symbol.name] = val
 
-from base_functions import repl_env
+from simba.base_functions import repl_env
 
 class Namespace():
     """Just like an environment except that it has a dictionary of required and included namespaces.

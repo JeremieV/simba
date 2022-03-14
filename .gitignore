@@ -7,3 +7,4 @@ formatting-settings.cljfmt.edn
 
 dist
 src/simba_lang.egg-info
+.simba

@@ -1,5 +1,5 @@
 import re
-from simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword, Namespace)
+from simba.simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword, Namespace)
 import pyrsistent as p
 import pvectorc
 

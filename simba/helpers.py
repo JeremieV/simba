@@ -1,6 +1,6 @@
 import os
-from simba_exceptions import MultipleNamespacesError, NoNamespaceError
-import sexprs_reader_printer
+from simba.simba_exceptions import MultipleNamespacesError, NoNamespaceError
+import simba.sexprs_reader_printer as sexprs_reader_printer
 
 def reverse(lst):
     return [ele for ele in reversed(lst)]
@@ -84,7 +84,7 @@ def find_ns(name, ast_list):
     return res[0]
 
 def return_ns(name, ast_list):
-    from simba_types import Symbol, SymbolicExpression
+    from simba.simba_types import Symbol, SymbolicExpression
     res = []
     is_found = False
     adding = False
@@ -102,7 +102,7 @@ def return_ns(name, ast_list):
     return res
 
 def return_test_ns(ast_list):
-    from simba_types import Symbol, SymbolicExpression
+    from simba.simba_types import Symbol, SymbolicExpression
     res = []
     is_test = False
     is_found = False

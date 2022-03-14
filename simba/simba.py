@@ -10,14 +10,12 @@ from prompt_toolkit.history import FileHistory
 
 import pyrsistent as p
 
-sys.path.insert(0, '.')
-
 # import antlr4
-import sexprs_reader_printer
-import dotexprs_reader_printer
-from simba_types import *
-import helpers
-import sb
+import simba.sexprs_reader_printer as sexprs_reader_printer
+# import src.simba.dotexprs_reader_printer
+from simba.simba_types import *
+import simba.helpers as helpers
+import simba.sb as sb
 
 # _reader    = sexprs_reader_printer.SexpReader
 # _read_form  = sexprs_reader_printer.read_str
@@ -37,7 +35,7 @@ def read_string(string):
 def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
     return syntax.to_string(sexp, lb=lb)
 
-from simba_exceptions import SimbaException, MultipleDispatchException, FailingGuardException, MultiMethodException, SimbaSyntaxError
+from simba.simba_exceptions import SimbaException, MultipleDispatchException, FailingGuardException, MultiMethodException, SimbaSyntaxError
 
 def bind_fn_args(fn_args:tuple, p_args: tuple, r_args: dict) -> dict:
     names = {}
