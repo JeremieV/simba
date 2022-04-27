@@ -84,12 +84,12 @@ def find_ns(name, ast_list):
     return res[0]
 
 def return_ns(name, ast_list):
-    from simba.simba_types import Symbol, SymbolicExpression
+    from simba.simba_types import Symbol, List
     res = []
     is_found = False
     adding = False
     for exp in ast_list:
-        cond = isinstance(exp, SymbolicExpression)
+        cond = isinstance(exp, List)
         if cond and exp[0] == Symbol("ns") and exp[1] == Symbol(name):
             if is_found: raise MultipleNamespacesError(f"Multiple namespaces of the name {name} were found.")
             is_found = True
@@ -102,12 +102,12 @@ def return_ns(name, ast_list):
     return res
 
 def return_test_ns(ast_list):
-    from simba.simba_types import Symbol, SymbolicExpression
+    from simba.simba_types import Symbol, List
     res = []
     is_test = False
     is_found = False
     for exp in ast_list:
-        cond = isinstance(exp, SymbolicExpression)
+        cond = isinstance(exp, List)
         if cond and exp[0] == Symbol("ns") and isinstance(exp[1], Symbol) and exp[1].name[-5:] == "-test":
             res.append([])
             is_test = True

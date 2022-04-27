@@ -1,0 +1,3 @@
+pyrsistent
+prompt_toolkit
+toolz

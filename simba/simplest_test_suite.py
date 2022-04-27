@@ -1,9 +1,4 @@
 #! python3
-"""
-This is the only Python test file. For testing the really basic features. 
-All the other tests will be written in Simba.
-"""
-
 simple_tests = [
     # literals
     "()", None,

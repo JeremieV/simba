@@ -10,7 +10,7 @@
 
   (variadic 12 13 1 2 3 4)
 
-  (comment
+  (comment 
   ;; FUNCTIONS
   ;; =========
 
@@ -34,7 +34,7 @@
 
     (concat [1] [2 3])
 
-    (prepend 1 [23 34 5])
+    (cons 1 [23 34 5])
 
     (append 2 [23 34 4 545])
 

@@ -1,8 +1,9 @@
 #! python3
 import sys, traceback
-from types import ModuleType
+from types import ModuleType, LambdaType
 from typing import Tuple, Union
 from importlib.resources import read_text
+import traceback
 
 import argparse
 from prompt_toolkit.shortcuts.prompt import PromptSession
@@ -13,7 +14,8 @@ import pyrsistent as p
 # import antlr4
 import simba.sexprs_reader_printer as sexprs_reader_printer
 # import src.simba.dotexprs_reader_printer
-from simba.simba_types import *
+from simba.simba_types import List, makeList, Symbol, Map, Vector, Namespace, Environment, Keyword
+from simba.simba_exceptions import UnresolvedSymbolError
 import simba.helpers as helpers
 import simba.sb as sb
 
@@ -24,7 +26,7 @@ _reader = sexprs_reader_printer
 
 default_syntax = sexprs_reader_printer
 
-# def read_sexp(string, syntax = default_syntax): # returns a SymbolicExpression
+# def read_sexp(string, syntax = default_syntax): # returns a List
 #     # read the frontmatter
 #     return syntax.read_str(string)
 
@@ -35,63 +37,42 @@ def read_string(string):
 def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
     return syntax.to_string(sexp, lb=lb)
 
-from simba.simba_exceptions import SimbaException, MultipleDispatchException, FailingGuardException, MultiMethodException, SimbaSyntaxError
+from simba.simba_exceptions import SimbaException, MultipleDispatchException, MultiMethodException, SimbaSyntaxError
 
-def bind_fn_args(fn_args:tuple, p_args: tuple, r_args: dict) -> dict:
+def bind_fn_args(fn_args:tuple, _args: tuple) -> dict:
     names = {}
     for i, arg in enumerate(fn_args):
         if arg.name == '&':
-            names[fn_args[i+1].name] = p_args[i:]
+            names[fn_args[i+1].name] = _args[i:]
             break
         else:
-            names[arg.name] = p_args[i]
+            names[arg.name] = _args[i]
     return names
 
 class Function:
     """Functions are anonymous, but may contain names in their metadata.
     Any Function can be promoted to a multimethod with the `register` method.
     """
-    def __init__(self, params, ast, bindings, _r_args = None):
-        # positonalParams = pass
-        # namedParams = pass
-        r_args = _r_args if _r_args is not None else {}
+    def __init__(self, params, ast, bindings, macro = False):
         self.args = params
         self.ast = ast
-        self.guard = None if 'when' not in r_args else r_args['when']
         self.bindings = bindings # the bindings should hold the bindings from the args and closure
-        self.macro = r_args['macro'] if 'macro' in r_args else False
+        self.macro = macro
         self.method_table = []
-        if 'meta' in r_args:
-            self.meta = r_args['meta']
-        else:
-            self.meta = {}
-        for k in ['macro', 'meta']:
-            if k in r_args: r_args.pop(k)
-        self.meta = self.meta | r_args
     def register(self, fn):
         return Multi(self, **self.meta, macro = self.macro).register(fn) # add meta
-    def __call__(self, *e_p_args, **e_r_args):
+    def __call__(self, *e_p_args):
         res =  None
         env = Environment(
                 outer=self.bindings,
-                names=bind_fn_args(self.args, e_p_args, e_r_args)
+                names=bind_fn_args(self.args, e_p_args)
             )
         for e in self.ast:
             res = eval_sexp(e, env = env)
         return res
 
-def check_guard(guard:Union[Function,None], p_args:tuple, r_args:dict):
-    if guard:
-        return guard(*p_args, **r_args)
-    else:
-        return True
-
-def signature_match(signature:tuple, p_args:tuple, r_args:dict, guard: Union[Function,None] = None) -> bool:
-    if Symbol('&') in signature:
-        return check_guard(guard, p_args, r_args) and True
-    else:
-        # TODO: for now the signature length does not take into account the keyword arguments or type signatures
-        return len(p_args) == len(signature) and check_guard(guard, p_args, r_args)
+def signature_match(signature:tuple, args:tuple):
+    return True if Symbol('&') in signature else len(args) == len(signature)
 
 class Multi:
     """All functions can be promoted to multimethods.
@@ -102,11 +83,11 @@ class Multi:
         if 'macro' in self.meta:
             self.macro = self.meta['macro']
             self.meta.pop('macro')
-        else: 
+        else:
             self.macro = False
         self.register(fn)
     def register(self, fn: Function):
-        self.method_table.append((fn.args, fn, fn.guard))
+        self.method_table.append((fn.args, fn))
         return self
     def clear(self):
         self.method_table = []
@@ -119,7 +100,7 @@ class Multi:
         return len(self.method_table)
     def __call__(self, *p_args, **r_args):
         for tup in self.method_table:
-            if signature_match(tup[0], p_args, r_args, guard = tup[2]):
+            if signature_match(tup[0], p_args):
                 return tup[1](*p_args, **r_args)
         n = self.meta['name'] if 'name' in self.meta else ""
         raise MultipleDispatchException(f"No matching signature for multimethod {n}")
@@ -157,7 +138,7 @@ def simba_repl(multi = False):
     prompt_session = PromptSession(FileHistory('~/.simba_history'))
     # load the standard library
     _env = Namespace()
-    eval_sexp(SymbolicExpression(Symbol('ns'), Symbol('repl')), _env)
+    eval_sexp(makeList(Symbol('ns'), Symbol('repl')), _env)
     while not eof:
         try:
             line = prompt_session.prompt('>>> ', multiline=multi)
@@ -177,29 +158,23 @@ def simba_repl(multi = False):
 def quasiquote(ast):
     """The quasiquote expansion algorithm"""
     if isinstance(ast, Symbol) or isinstance(ast, Map): 
-        return SymbolicExpression(Symbol('quote'), ast)
-    # if isinstance(ast, Keyword):
-    #     return SymbolicExpression(Symbol('quote'), )
-    elif isinstance(ast, SymbolicExpression) and ast[0] == Symbol("unquote"):
+        return makeList(Symbol('quote'), ast)
+    elif isinstance(ast, List) and ast[0] == Symbol("unquote"):
         return ast[1]
-    elif isinstance(ast, SymbolicExpression):
-        relational = []
-        for k in ast.relational:
-            relational.append(Keyword(k)); relational.append(ast.relational[k])
-        res = SymbolicExpression()
-        for e in helpers.reverse(ast.positional):
-            if isinstance(e, SymbolicExpression) and e[0] == Symbol("splice-unquote"):
-                res = SymbolicExpression(Symbol('concat'), e[1], res)
+    elif isinstance(ast, List):
+        res = makeList()
+        for e in helpers.reverse(ast):
+            if isinstance(e, List) and e[0] == Symbol("splice-unquote"):
+                res = makeList(Symbol('concat'), e[1], res)
             else:
-                res = SymbolicExpression(Symbol('prepend-sexp'), quasiquote(e), res)
-        # TODO: DOES THIS ALGORITHM PERFORM MACROEXPANSION ON KEYWORD ARGUMENTS??
-        res = SymbolicExpression(Symbol('concat'), res, relational)
+                res = makeList(Symbol('prepend-sexp'), quasiquote(e), res)
+        res = makeList(Symbol('concat'), res)
         return res
     else:
         return ast
 
 def is_macro_call(ast, env):
-    if isinstance(ast, SymbolicExpression) and len(ast.positional) != 0 and isinstance(ast[0], Symbol):
+    if isinstance(ast, List) and len(ast) != 0 and isinstance(ast[0], Symbol):
         try:
             refers_to = env.get(ast[0])
         except:
@@ -219,8 +194,7 @@ def macroexpand(ast, env):
     while is_macro_call(ast, env):
         macro_fn = env.get(ast[0])
         p_args = ast[1:]
-        r_args = ast.relational
-        ast = macro_fn(*p_args, **r_args)
+        ast = eval_sexp(makeList(macro_fn, *p_args), env, macro_call = True)
     return ast
 
 loaded_ns = {}
@@ -249,7 +223,7 @@ def require(ns_names, env, include = False):
             else:       env.require_ns(loaded_ns[n])
 
 def eval_primitive(sexp, env):
-    """This function is charged of evaluating anything that is not a SymbolicExpression.
+    """This function is charged of evaluating anything that is not a List.
     In other words it just returns primitive data structures like Symbols, Vectors, etc...
     This distinction is made so that it is feasible to implement Tail Call Optimization
     on Symbolic Expression evaluation.
@@ -278,7 +252,7 @@ def eval_primitive(sexp, env):
     else: # if the value is an atomic data type, cannot evaluate further
         return sexp
 
-def eval_sexp(sexp, env):
+def eval_sexp(sexp, env, macro_call = False):
     """`eval_exp` evaluates a Symbolic Expression within a context.
     The context is the 'environment' a mapping of names to namespaces,
     and the namespace in which the execution is working at the moment.
@@ -286,71 +260,72 @@ def eval_sexp(sexp, env):
     """
     global loaded_ns
     while True:
-        # print(sexp)
-        if not isinstance(sexp, SymbolicExpression):
+        # print(print_sexp(sexp))
+        if not isinstance(sexp, List):
             return eval_primitive(sexp, env)
 
         # macroexpansion step
         sexp = macroexpand(sexp, env)
 
-        # We need to check for primitive datatypes before and after macroexpansion unfortunately
-        if not isinstance(sexp, SymbolicExpression):
+        # We need to check for primitive datatypes before and after macroexpansion
+        if not isinstance(sexp, List):
             return eval_primitive(sexp, env)
 
-        if len(sexp.positional) == 0:
+        if len(sexp) == 0:
             return None
         ## Special Forms: ##
-        if isinstance(head := sexp.positional[0], SymbolicExpression):
-            head = sexp.positional[0] = eval_sexp(head, env)
-        head = sexp.positional[0]
+        if isinstance(sexp[0], List):
+            # sexp[0] = eval_sexp(sexp[0], env)
+            sexp = makeList(eval_sexp(sexp[0], env), *sexp[1:])
+        head = sexp[0]
         is_s = isinstance(head, Symbol)
         if is_s and "def" == head.name:
-            if len(sexp.positional) < 3:
+            if len(sexp) < 3:
                 raise SimbaSyntaxError(f"\n\t`def` statement has invalid argument pattern in:\n\t{print_sexp(sexp)}")
-            _name = sexp.positional[1]
-            _val = sexp.positional[2]
+            _name = sexp[1]
+            _val = sexp[2]
             _res = eval_sexp(_val, env)
             return env.ns.set(_name, _res)
         elif is_s and "quote" == head.name:
-            if len(sexp.positional) != 2: raise SimbaSyntaxError(f"\n\t`quote` expected 1 argument in:\n\t{print_sexp(sexp)}")
-            return sexp.positional[1]
+            if len(sexp) != 2: raise SimbaSyntaxError(f"\n\t`quote` expected 1 argument in:\n\t{print_sexp(sexp)}")
+            return sexp[1]
         elif is_s and "if" == head.name:
-            if len(sexp.positional) < 3:
+            if len(sexp) < 3:
                 raise SimbaSyntaxError(f"\n\tToo few arguments to if in:\n\t{print_sexp(sexp)}")
-            if len(sexp.positional) > 4:
+            if len(sexp) > 4:
                 raise SimbaSyntaxError(f"\n\tToo many arguments to if in:\n\t{print_sexp(sexp)}")
-            cond, then = sexp.positional[1:3]
+            cond, then = sexp[1:3]
             evaled_cond = eval_sexp(cond, env)
             if evaled_cond:
                 sexp = then 
                 continue # TCO
             else:
-                if (len(sexp.positional) == 4):
-                    _else = sexp.positional[3]
+                if (len(sexp) == 4):
+                    _else = sexp[3]
                     sexp = _else 
                     continue # TCO
                 else: return None
         elif is_s and "fn" == head.name:
-            arg1 = sexp.positional[1]
+            arg1 = sexp[1]
             if isinstance(arg1, Vector):
                 # anonymous function (single method declaration)
-                argVector, body = sexp.positional[1], sexp.positional[2:]
+                argVector, body = sexp[1], sexp[2:]
                 # what the closure should do is:
                 # - gather all the free variables
                 # - point to the local bindings in `bindings`
                 bindings = env # this is temporary:
                 # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
                 # in the future, the bindings will be only the ones references in the closure
-                return Function(argVector, body, bindings, sexp.relational)
-            elif isinstance(arg1, SymbolicExpression):
+                return Function(argVector, body, bindings, macro = False)
+            elif isinstance(arg1, List):
                 # anonymous multimethod (with multiple method declarations)
-                fn = Function(sexp[1][0], sexp[1][1:], env, sexp.relational)
+                fn = Function(sexp[1][0], sexp[1][1:], env, macro = False)
                 for exp in sexp[2:]:
-                    # argVector, body = exp.positional[0], exp.positional[1:]
-                    fn = fn.register(Function(exp.positional[0], exp.positional[1:], env, sexp.relational))
+                    # argVector, body = exp[0], exp[1:]
+                    fn = fn.register(Function(exp[0], exp[1:], env, macro = False))
                 return fn
         elif is_s and "do" == head.name:
-            if len(sexp.positional) == 1: return None
+            if len(sexp) == 1: return None
             for e in sexp[1:-1]:
                 eval_sexp(e, env)
             sexp = sexp[-1]
@@ -358,8 +333,8 @@ def eval_sexp(sexp, env):
         elif is_s and "let" == head.name:
             # creates a new environment and binds the values to it successively (in order)
             # evaluates the body in an implicit do
-            if len(sexp.positional) == 2: raise SimbaSyntaxError(f"\n\t`let` form is missing a body in:\n\t{print_sexp(sexp)}")
-            vec = sexp.positional[1]
+            if len(sexp) == 2: raise SimbaSyntaxError(f"\n\t`let` form is missing a body in:\n\t{print_sexp(sexp)}")
+            vec = sexp[1]
             env = Environment(outer = env)
             for i in range(0, len(vec), 2):
                 env.set(vec[i], eval_sexp(vec[i+1], env))
@@ -367,6 +342,25 @@ def eval_sexp(sexp, env):
                 eval_sexp(exp, env)
             sexp = sexp[-1]
             continue # TCO
+        elif is_s and "." == head.name:
+            # assumes the member to be a symbol, otherwise will throw
+            target = eval_sexp(sexp[1], env)
+            if isinstance(sexp[2], List):
+                member = sexp[2][0].name
+                args = sexp[2][1:]
+            else:
+                member = sexp[2].name
+                args = sexp[3:]
+            args = [eval_sexp(arg, env) for arg in args]
+            if member.startswith('-'):
+                return getattr(target, member)
+            if hasattr(target, member):
+                a = getattr(target, member)
+                if callable(a) and not isinstance(a, LambdaType):
+                    return eval(f"target.{member}")(*args)
+                else:
+                    return a
+            raise SimbaException(f"{target} has no attribute {member}")
         elif is_s and "try" == head.name:
             if Keyword('catch') in sexp and Keyword('finally') in sexp:
                 try:
@@ -374,7 +368,8 @@ def eval_sexp(sexp, env):
                     for exp in sexp[1:]:
                         res = eval_sexp(exp, env)
                     return res
-                except:
+                except Exception as e:
+                    env.set(Symbol("*error*"), e)
                     return eval_sexp(sexp['catch'], env)
                 finally:
                     eval_sexp(sexp['finally'], env)
@@ -384,7 +379,8 @@ def eval_sexp(sexp, env):
                     for exp in sexp[1:]:
                         res = eval_sexp(exp, env)
                     return res
-                except:
+                except Exception as e:
+                    env.set(Symbol("*error*"), e)
                     return eval_sexp(sexp['catch'], env)
             elif Keyword('finally') in sexp:
                 try:
@@ -399,8 +395,9 @@ def eval_sexp(sexp, env):
                 for exp in sexp[1:]:
                     res = eval_sexp(exp, env)
                 return res
+        # ns stuff #
         elif is_s and "ns" == head.name:
-            ns_name = sexp.positional[1].name                
+            ns_name = sexp[1].name
             if ns_name not in loaded_ns:
                 if env.ns.name == "":
                     # it means the execution is not currently happening in an environment:
@@ -417,35 +414,37 @@ def eval_sexp(sexp, env):
             # dadi
             break
         elif is_s and "require" == head.name:
-            require([sexp.positional[1].name], env.ns)
+            require([sexp[1].name], env.ns)
             break
         elif is_s and "include" == head.name:
-            require([sexp.positional[1].name], env.ns, include=True)
+            require([sexp[1].name], env.ns, include=True)
             break
+        # macros #
         elif is_s and "quasiquote" == head.name:
             sexp = quasiquote(sexp[1])
             continue # TCO
         elif is_s and "macroexpand" == head.name:
-            if len(sexp.positional) != 2: return Exception("`macroexpand` expected 1 argument.")
+            if len(sexp) != 2: return Exception("`macroexpand` expected 1 argument.")
             return macroexpand(sexp[1], env)
         else:
             ## Non-Special Forms ##
             ## evaluate the args ##
-            evaledPArgs = [eval_sexp(e, env) for e in sexp.positional]
-            evaledRArgs = {eval_sexp(key, env): \
-                            eval_sexp(sexp.relational[key], env) \
-                            for key in sexp.relational}
+            if not macro_call:
+                evaluated_args = [eval_sexp(e, env) for e in sexp]
+            else:
+                evaluated_args = sexp
+                macro_call = False
             matched = False
-            if isinstance(fun := evaledPArgs[0], Multi):
+            if isinstance(fun := evaluated_args[0], Multi):
                 for tup in fun.method_table:
-                    if signature_match(tup[0], evaledPArgs[1:], evaledRArgs, guard = tup[2]):
-                        fun = evaledPArgs[0] = tup[1]
+                    if signature_match(tup[0], evaluated_args[1:]):
+                        fun = evaluated_args[0] = tup[1]
                         matched = True
                         break
-                if not matched: raise MultipleDispatchException(f"No matching signature {evaledPArgs} for multimethod {sexp[0].name}")
+                if not matched: raise MultipleDispatchException(f"No matching signature {evaluated_args} for multimethod {sexp[0].name}")
             if isinstance(fun, MultiFn):
                 # evaluate the dispatch function
-                val = eval_sexp(SymbolicExpression(fun.dispatch_fn, *evaledPArgs[1:], **evaledRArgs), env)
+                val = eval_sexp(makeList(fun.dispatch_fn, *evaluated_args[1:]), env)
                 # if the value is missing from the dispatch table fall back to "default"
                 if val not in fun.method_table:
                     try:
@@ -457,11 +456,8 @@ def eval_sexp(sexp, env):
             if isinstance(fun, Function):
                 env = Environment(
                     outer = fun.bindings,
-                    names = bind_fn_args(fun.args, evaledPArgs[1:], evaledRArgs) # args are the names of the env
+                    names = bind_fn_args(fun.args, evaluated_args[1:]) # args are the names of the env
                 )
-                # first check the guard if there is a guard and the fn has not already been selected from a multi
-                if fun.guard and not matched and not eval_sexp(fun.guard, env):
-                    raise FailingGuardException('The guard condition is failing for the function.')
                 # if the body is empty return `nil`
                 if len(fun.ast) == 0:
                     return None
@@ -470,7 +466,7 @@ def eval_sexp(sexp, env):
                 continue
             else:
                 ## apply the head ##
-                return fun(*evaledPArgs[1:], **evaledRArgs)
+                return fun(*evaluated_args[1:])
 
 
 def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):

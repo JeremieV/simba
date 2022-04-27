@@ -1,9 +1,9 @@
-import simba
-import simplest_test_suite
+import simba.simba as simba
+import simba.simplest_test_suite as st
 
 ## Running the Python tests ##
 
-t = simplest_test_suite.simple_tests
+t = st.simple_tests
 tests_done = 0
 for i in range(len(t)):
     if (i % 2) == 0:

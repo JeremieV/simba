@@ -6,6 +6,25 @@ from re import split
 from simba.simba_exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
 import pyrsistent as p
 
+class Keyword(str): pass
+List = p.PList
+makeList = p.l
+Vector = p.PVector
+Map = p.PMap
+
+def make_meta_map(m) -> Map:
+    # the m should be evaluated
+    if isinstance(m, Map):
+        return m
+    elif isinstance(m, Symbol): # should be 'type'
+        return p.pmap({Keyword('tag'): m})
+    elif isinstance(m, Keyword):
+        return p.pmap({m: True})
+    # elif isinstance(m, str):
+    #     return p.pmap({Keyword('tag'), Symbol(m)})
+    else:
+        raise SimbaException(f"The type {type(m)} cannot serve as metadata. Only Map, type, and Keyword are allowed.")
+
 # Atomic Data Types
 class Symbol:
     def __init__(self, string):
@@ -13,13 +32,14 @@ class Symbol:
         if string == '/': self.name = '/'; self.namespace = None
         elif len(split_str) > 2: raise SimbaSyntaxError(f"A symbol can only have one namespace qualifier (symbol `{string}`).")
         elif len(split_str) == 2:
-            if split_str[0] == '' or split_str[1] == '': raise SimbaSyntaxError("None of the two members of the symbol should be empty.", string, None, None)
+            if split_str[0] == '' or split_str[1] == '': raise SimbaSyntaxError("None of the two members of the symbol should be empty.")
             self.namespace = split_str[0]
             self.name = split_str[1]
         elif len(split_str) == 1:
             if split_str[0] == '': raise SimbaSyntaxError("A symbol cannot be empty.")
             self.namespace = None
             self.name = split_str[0]
+        self.meta = None
     def __str__(self):
         if self.namespace: return '/'.join([self.namespace, self.name])
         else: return self.name
@@ -29,82 +49,77 @@ class Symbol:
         if not isinstance(__o, Symbol): return False
         if __o.name == self.name and __o.namespace == self.namespace: return True
         return False
+    def withMeta(self, m):
+        self.meta = make_meta_map(m)
+        return self
 
-Environment = dict
-class Keyword(str): pass
+class Var:
+    def __init__(self):
+        pass
 
 # Symbolic Data Types
 
-class SymbolicExpression():
-    """A symbolic expression contains: symbol, positional arguments, relational arguments"""
-    def __init__(self, *args, **kwargs):
-        self.positional = []
-        self.relational = {**kwargs}
-        _skip = False
-        for i, e in enumerate(args):
-            if _skip: _skip = False; continue
-            if not isinstance(e, Keyword):
-                self.positional.append(e)
-            else:
-                self.relational[str(e)] = args[i+1]
-                _skip = True
+# class SymbolicExpression():
+#     """A symbolic expression contains: symbol, positional arguments, relational arguments"""
+#     def __init__(self, *args, **kwargs):
+#         self.positional = []
+#         self.relational = {**kwargs}
+#         _skip = False
+#         for i, e in enumerate(args):
+#             if _skip: _skip = False; continue
+#             if not isinstance(e, Keyword):
+#                 self.positional.append(e)
+#             else:
+#                 self.relational[str(e)] = args[i+1]
+#                 _skip = True
 
-    def append(self, e):
-        self.positional.append(e)
+#     def append(self, e):
+#         self.positional.append(e)
 
-    def __repr__(self):
-        return '<SymbolicExpression>(' + str(self.positional) + str(self.relational) + ')'
+#     def __repr__(self):
+#         return '<SymbolicExpression>(' + str(self.positional) + str(self.relational) + ')'
 
-    def __contains__(self, item):
-        """This method overrides the Python `in` operator:
-        - If `item` is a Keyword, look in the relational arguments
-        - else, look in the positional arguments"""
-        if isinstance(item, Keyword) or isinstance(item, str):
-            return str(item) in self.relational
-        else:
-            return item in self.positional
+#     def __contains__(self, item):
+#         """This method overrides the Python `in` operator:
+#         - If `item` is a Keyword, look in the relational arguments
+#         - else, look in the positional arguments"""
+#         if isinstance(item, Keyword) or isinstance(item, str):
+#             return str(item) in self.relational
+#         else:
+#             return item in self.positional
 
-    def __getitem__(self, __slice):
-        if isinstance(__slice, str):
-            return self.relational[__slice]
-        else:
-            return self.positional[__slice]
+#     def __getitem__(self, __slice):
+#         if isinstance(__slice, str):
+#             return self.relational[__slice]
+#         else:
+#             return self.positional[__slice]
 
-    def __eq__(self, __o):
-        if not isinstance(__o, SymbolicExpression): return False
-        return  len(self) == len(__o) \
-            and all(value == __o[i] for i, value in enumerate(self.positional)) \
-            and all(key in __o and self[key] == __o[key] for key in self.relational if key != 'meta')
+#     def __eq__(self, __o):
+#         if not isinstance(__o, SymbolicExpression): return False
+#         return  len(self) == len(__o) \
+#             and all(value == __o[i] for i, value in enumerate(self.positional)) \
+#             and all(key in __o and self[key] == __o[key] for key in self.relational if key != 'meta')
 
-    def __len__(self):
-        return len(self.positional) + len(self.relational)
+#     def __len__(self):
+#         return len(self.positional) + len(self.relational)
 
-    def __add__(self, sexp):
-        if isinstance(sexp, SymbolicExpression):
-            self.positional = self.positional + sexp.positional
-            self.relational = self.relational | sexp.relational
-            return self
-        # elif isinstance(sexp, tuple):
-        #     self.positional = self.positional + SymbolicExpression(sexp).positional
-        #     return self
-        else:
-            raise SimbaException(f"Tried to concat SymbolicExpression with unsupported type {type(sexp)}")
-
-# Collection Data Types
-
-List = p.PList
-Vector = p.PVector
-Map = p.PMap
+#     def __add__(self, sexp):
+#         if isinstance(sexp, SymbolicExpression):
+#             self.positional = self.positional + sexp.positional
+#             self.relational = self.relational | sexp.relational
+#             return self
+#         # elif isinstance(sexp, tuple):
+#         #     self.positional = self.positional + SymbolicExpression(sexp).positional
+#         #     return self
+#         else:
+#             raise SimbaException(f"Tried to concat SymbolicExpression with unsupported type {type(sexp)}")
 
 class Protocol():
     """This is the protocol type"""
     pass
 
 class Environment():
-    """
-    Just like a scheme environment. Contains a mapping of symbols to namespaces and an outer environment.
-    Corresponds to the scope of a `let` form. Importantly, the bindings created are immutable.
-    """
+    """Corresponds to the scope of a `let` form. Importantly, the bindings created are immutable."""
     def __init__(self, outer, names = None):
         self.outer = outer
         self.names = {} if names is None else names
@@ -144,9 +159,9 @@ class Namespace():
             raise ImmutableBindingException(f"Cannot mutate the binding `{symbol}` from the current namespace {self.name}.")
         self.names[symbol.name] = value
     def get(self, symbol):
-        """Looks for a binding in namespace and . Returns the env where the match is made first.
+        """Looks for a binding in namespace.
         If the binding is namespace-qualified and doesn't exist in that ns, throws an error.
-        Else, if the binding doesn't exist, raise an error"""
+        Else, if the binding doesn't exist, throws an error"""
         n = symbol.name
         ns = symbol.namespace
         # 1. look in external namespaces if the symbol is ns-qualified

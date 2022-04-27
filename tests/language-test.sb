@@ -2,9 +2,6 @@
   :doc "Tests for the built-in language features, such as closures"
   :date-created "3 February 2022"
   :author "Jérémie Vaney")
-;; :include [base]
-  
-(include base)
 
 ;; importantly tests whether the implementation can manage top level literals that are not SymbolicExpressions 
 (def xyz 3)
@@ -59,6 +56,11 @@ xyz
         b 2]
     (let [a 3]
       (+ a b))) 5
+  
+  (let [var 30]
+    (let [inner 0]
+      (let [inner var]
+        inner))) 30
 
   "closures"
   ;; calling an empty function - should return nil
@@ -372,8 +374,12 @@ xyz
 
   "eval"
   (eval '(* 2 3)) 6
-  ;; (let [a 20]
-  ;;   (eval 'a)) 20
+  (let [a 20]
+    (->> "a"
+         py/read_string
+         eval)) 20
+  (let [abc 3]
+    (eval 'abc)) 3
 
   ;; ::passing
   "sexp equality testing"
@@ -387,13 +393,12 @@ xyz
   `(1 2 3 ~(+ 2 2)) '(1 2 3 4)
   `(1 2 3 ~@[1 2 3]) '(1 2 3 1 2 3)
 
-  "compatibility of quasiquoting with named parameters"
-  `(1 2 3 :named 2) '(1 2 3 :named 2)
-  `(1 2 3 ~@(sexp :named "value")) '(1 2 3 4 :named "value")
-
   "named parameters in vectors"
   [:named 3 :other 3] [:named 3 :other 3]
 
+  ;; "compatibility of quasiquoting with named parameters"
+  ;; `(1 2 3 :named 2) '(1 2 3 :named 2)
+  ;; `(1 2 3 ~@(sexp :named "value")) '(1 2 3 4 :named "value")
   ;; ::failing
   ;; '() (sexp 1)
   ;; `(1 2 3 :named 2) '(1 2 3 :named 4)

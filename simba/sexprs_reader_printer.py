@@ -1,7 +1,6 @@
 import re
-from simba.simba_types import (Symbol, Vector, Map, SymbolicExpression, Keyword, Namespace)
+from simba.simba_types import (Symbol, Vector, Map, List, makeList, Keyword, Namespace)
 import pyrsistent as p
-import pvectorc
 
 class Blank(Exception): pass
 
@@ -49,7 +48,8 @@ def read_atom(reader):
     elif re.match(string_re, token):return _unescape(token[1:-1])
     elif token[0] == '"':           raise Exception("expected '\"', got EOF")
     elif token[0] == ':':           return Keyword(token[1:])
-    elif token[0] == '.':           return token[1:]
+    elif token[0] == '.' \
+        and len(token) > 1:         return Symbol(token[1:])
     elif token == "nil":            return None
     elif token == "true":           return True
     elif token == "false":          return False
@@ -58,34 +58,31 @@ def read_atom(reader):
 def read_sequence(reader, start='(', end=')'):
     token = reader.next()
     if token != start: raise Exception("expected '" + start + "'")
-
     arguments = []
     token = reader.peek()
+    member = None
     while token != end:
         if not token: raise Exception("expected '" + end + "', got EOF")
-        if token[0] == '.':
+        if token[0] == '.' and len(token) > 1:
             # in the midst of this if clause
-            arguments.append(Symbol('get-attr'))
-            arguments.append(read_form(reader))
+            arguments.append(Symbol('.'))
+            member = read_form(reader)
         arguments.append(read_form(reader))
         token = reader.peek()
     reader.next()
-    # print(arguments)
+    if member is not None:
+        arguments.insert(2, member)
     return arguments
 
 def readMap(reader):
     lst = read_sequence(reader, '{', '}')
     m = {}
     for name, value in zip(lst[0::2], lst[1::2]):
-        if isinstance(value, Keyword):
-            raise Exception("A map can only have keywords as keys.")
-        if isinstance(name, Keyword):
-            name = str(name)
         m[name] = value
     return p.pmap(m)
 
 def readSymbolicExpression(reader):
-    return SymbolicExpression(*read_sequence(reader, '(', ')'))
+    return makeList(*read_sequence(reader, '(', ')'))
 
 def readVector(reader):
     return p.pvector(read_sequence(reader, '[', ']'))
@@ -99,32 +96,32 @@ def read_form(reader):
         return None
     elif token == '\'':
         reader.next()
-        return SymbolicExpression(Symbol('quote'), read_form(reader))
+        return makeList(Symbol('quote'), read_form(reader))
     elif token == '`':
         reader.next()
-        return SymbolicExpression(Symbol('quasiquote'), read_form(reader))
+        return makeList(Symbol('quasiquote'), read_form(reader))
     elif token == '~':
         reader.next()
-        return SymbolicExpression(Symbol('unquote'), read_form(reader))
+        return makeList(Symbol('unquote'), read_form(reader))
     elif token == '~@':
         reader.next()
-        return SymbolicExpression(Symbol('splice-unquote'), read_form(reader))
-    # elif token == '^':
-    #     reader.next()
-    #     meta = read_form(reader)
-    #     return SymbolicExpression(Symbol('with-meta'), read_form(reader), meta)
+        return makeList(Symbol('splice-unquote'), read_form(reader))
+    elif token == '^':
+        reader.next()
+        meta = read_form(reader)
+        return read_form(reader).withMeta(meta) # makeList(Symbol('.'), read_form(reader), Symbol('withMeta'), meta)
     elif token == '@':
         reader.next()
-        return SymbolicExpression(Symbol('deref'), read_form(reader))
+        return makeList(Symbol('deref'), read_form(reader))
     # list
     elif token == ')': raise Exception("unexpected ')'")
     elif token == '(': return readSymbolicExpression(reader)
     # vector
     elif token == ']': raise Exception("unexpected ']'")
-    elif token == '[': return readVector(reader);
+    elif token == '[': return readVector(reader)
     # map
     elif token == '}': raise Exception("unexpected '}'")
-    elif token == '{': return readMap(reader);
+    elif token == '{': return readMap(reader)
     # atom
     else:              return read_atom(reader)
 
@@ -144,12 +141,8 @@ def to_string(obj, indent=0, lb=True) -> str:
         start = '\n'
     else:
         start = ''
-    if isinstance(obj, SymbolicExpression):
-        if obj.positional and obj.relational:
-            return start + " "*indent + "(" + " ".join(to_string(e,indent=indent+2) for e in obj.positional) + " " + " ".join(to_string(Keyword(key), indent=indent+2) + " " + to_string(obj.relational[key], indent=indent+2) for key in obj.relational) + ")"
-        elif obj.relational:
-            return "(" + " ".join(to_string(Keyword(key), indent=indent, lb=lb) + " " + to_string(obj.relational[key], indent=indent+2) for key in obj.relational) + ")"
-        else: return start + " "*indent + "(" + " ".join(to_string(e, indent=indent+2) for e in obj.positional) + ")"
+    if isinstance(obj, List):
+        return start + " "*indent + "(" + " ".join(to_string(e, indent=indent+2) for e in obj) + ")"
     elif isinstance(obj, Vector):
         return "[" + " ".join(to_string(e) for e in obj) + "]"
     elif isinstance(obj, Map):
@@ -169,5 +162,4 @@ def to_string(obj, indent=0, lb=True) -> str:
     elif isinstance(obj, Namespace):
         return f"#namespace[{obj.name}]"
     else:
-        # print(type(obj))
         return obj.__str__()

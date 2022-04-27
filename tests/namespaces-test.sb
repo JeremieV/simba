@@ -37,3 +37,9 @@
   included/a 1
   )
 
+(defmacro in-ns [name]
+  `(ns required))
+
+(in-ns 'required)
+
+(print *ns*)

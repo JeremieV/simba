@@ -9,7 +9,7 @@ from math import prod
 from types import LambdaType
 
 import pyrsistent
-from simba.simba_types import Map, Vector, SymbolicExpression, Symbol
+from simba.simba_types import Map, Vector, List, Symbol, makeList
 from simba.simba_exceptions import SimbaException
 import simba.helpers as helpers
 import time
@@ -35,7 +35,7 @@ def sb_add(x, y):
     return x + y
 
 def sb_print(e):
-    from simba import print_sexp
+    from simba.simba import print_sexp
     print(print_sexp(e))
 
 def sb_seq(seqable):
@@ -51,25 +51,25 @@ def sb_seq(seqable):
         return s
     elif isinstance(seqable, dict):
         return pyrsistent.pvector(seqable.items())
-    elif isinstance(seqable, SymbolicExpression):
+    elif isinstance(seqable, List):
         return pyrsistent.pvector(seqable)
     elif seqable is None:
         return None
     else:
-        raise SimbaException(f"Don't know how to make a seq from {type(seqable)}", None, None, None)
+        raise SimbaException(f"Don't know how to make a seq from {type(seqable)}")
 
 def sb_prepend_sexp(e, seq):
     """Defines a generic prepend function that should work on all sequence types.
     Returns an object of the same type as the second argument.
     If second arg is None, defaults to a SymbolicExpression"""
     if seq is None:
-        return SymbolicExpression(e)
+        return makeList(e)
     # elif isinstance(seq, tuple):
     #     return (e,) + seq
     # elif isinstance(seq, list):
     #     return [e] + seq
     # elif isinstance(seq, SymbolicExpression):
-    return SymbolicExpression(e) + SymbolicExpression(*seq)
+    return makeList(e) + makeList(*seq)
 
 def sb_generic_concat(a, b):
     """Python has no built-in way of concatenating sequences of different types.
@@ -87,8 +87,8 @@ def sb_generic_concat(a, b):
         return a + tuple(b)
     elif isinstance(a, list):
         return a + list(b)
-    elif isinstance(a, SymbolicExpression):
-        return a + SymbolicExpression(*b)
+    elif isinstance(a, List):
+        return a + makeList(*b)
 
 def sb_uniform_access(*attrs):
     """This implements the Uniform Access Principle.
@@ -107,7 +107,21 @@ def sb_uniform_access(*attrs):
             return eval(f"obj.{attr}")(*args)
         else:
             return a
-    raise SimbaException(f"{obj} has no attribute {attr}", None, None, None)
+    raise SimbaException(f"{obj} has no attribute {attr}")
+
+# def dot_form(target, member, *attrs):
+#     # assumes the member to be a symbol, otherwise will throw
+#     member = member.name
+#     args = attrs[2:]
+#     if member.name.startswith('-'):
+#         return getattr(target, member)
+#     if hasattr(target, member):
+#         a = getattr(target, member)
+#         if callable(a) and not isinstance(a, LambdaType):
+#             return eval(f"target.{member}")(*args)
+#         else:
+#             return a
+#     raise SimbaException(f"{target} has no attribute {member}")
 
 def throw(e): raise e
 
@@ -158,11 +172,12 @@ repl_env = {
     '>>': lambda a, b: a >> b,
 
     # types
-    'sexp': SymbolicExpression,
+    # 'sexp': SymbolicExpression,
     'symbol': Symbol,
     'Vector': Vector,
     'vector': pyrsistent.v,
     'tuple': tuple,
+    'list': makeList,
     't': lambda *t: t,
     'HashMap': Map,
     'hash-map': pyrsistent.pmap,
