@@ -11,3 +11,5 @@ class UnresolvedSymbolError(SimbaException): pass
 class MultipleNamespacesError(SimbaException): pass
 class NoNamespaceError(SimbaException): pass
 class ImmutableBindingException(SimbaException): pass
+
+class IllegalStateException(SimbaException): pass

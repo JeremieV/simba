@@ -1,7 +1,7 @@
-(ns language-test
-  :doc "Tests for the built-in language features, such as closures"
-  :date-created "3 February 2022"
-  :author "Jérémie Vaney")
+(ns ^{:doc "Tests for the built-in language features, such as closures"
+      :date-created "3 February 2022"
+      :author "Jérémie Vaney"}
+ language-test)
 
 ;; importantly tests whether the implementation can manage top level literals that are not SymbolicExpressions 
 (def xyz 3)
@@ -30,12 +30,12 @@ xyz
   "def"
   (try
     (def)
-    :catch "exception") "exception"
+    (catch "exception")) "exception"
   (try
     (def zzz)
-    :catch "exception") "exception"
+    (catch "exception")) "exception"
   ;; a def returns nil
-  (def a 3) nil
+  (def a 3) #'language-test/a
   ;; a definiton binds a symbol to its evaluated expression
   (do
     (def b (+ 5 (- 10 5)))
@@ -43,7 +43,7 @@ xyz
   ;; do does not introduce a new scope
   (do
     (def e 10)
-    (def f 30)) nil
+    (def f 30)) #'language-test/f
   (+ e f) 40
   ;; TODO add cases that should throw errors
 
@@ -56,7 +56,7 @@ xyz
         b 2]
     (let [a 3]
       (+ a b))) 5
-  
+
   (let [var 30]
     (let [inner 0]
       (let [inner var]
@@ -80,17 +80,17 @@ xyz
   (def h (fn
            ([] 0)
            ([a b] 2)
-           ([c d e] 3))) nil
+           ([c d e] 3))) #'language-test/h
   (h) 0
   (try (h 1)
-       :catch "error") "error"
+       (catch "error")) "error"
   (h 1 2) 2
   (h 0 0 0) 3
 
   (defn my-identity-multi
     ([] nil)
     ([one] one)
-    ([one two] [one two])) nil
+    ([one two] [one two])) #'language-test/my-identity-multi
 
   (my-identity-multi) nil
   (my-identity-multi 33) 33
@@ -105,12 +105,7 @@ xyz
   (= nil true) false
   (= nil false) false
   (= nil 0) false
-  {:one 1
-   :meta 'this
-   :code '(sexp object)}
-  {"one" 1
-   "meta" 'this
-   "code" '(sexp object)}
+  [:named 3 :other 3] [:named 3 :other 3]
 
   "identity"
   (is nil nil) true
@@ -145,7 +140,7 @@ xyz
 
   "=INTEROP="
   "dot form"
-  '(.inc this) '(get-attr "inc" this))
+  '(.inc this) '(. this inc))
   ;;  (do
   ;;    ((fn []
   ;;       (def b 60)
@@ -155,8 +150,6 @@ xyz
   ;;    (do (def c "text"))
   ;;    c) nil ;; catch unresolved symbol error
   ;; calling with the wrong amount of arguments throws an error
-
-;; TODO address the symbol resolution bugs
 
 (tests "sequences"
 
@@ -179,8 +172,8 @@ xyz
   (seq [1 2 3]) [1 2 3]
 
   "map"
-  (map inc [1 2 3]) [2 3 4]
-  (map dec [1 2 3]) [0 1 2]
+  (map inc [1 2 3]) '(2 3 4)
+  (map dec [1 2 3]) '(0 1 2)
   (hash-map
    (map
     (fn [tup] (t (inc (first tup)) (inc (second tup))))
@@ -190,18 +183,18 @@ xyz
              3 3
              4 4}
 
-  (hash-map
-   (map
-    (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup))))
-    (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")))
-  {"op" "eval"   "code" "*ns*"   "id" "1"}
+  ;; (hash-map
+  ;;  (map
+  ;;   (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup))))
+  ;;   (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")))
+  ;; {"op" "eval"   "code" "*ns*"   "id" "1"}
 
-  (->> (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")
-       (map
-        (partial map (partial .decode "utf-8")))
-      ;;  (map (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup)))))
-       hash-map)
-  {"op" "eval"   "code" "*ns*"   "id" "1"}
+  ;; (->> (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")
+  ;;      (map
+  ;;       (partial map (partial .decode "utf-8")))
+  ;;     ;;  (map (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup)))))
+  ;;      hash-map)
+  ;; {"op" "eval"   "code" "*ns*"   "id" "1"}
 
   (hash-map (t (map inc (t 1 1)))) {2 2} ;; can map over a tuple and that returns a Vector
 
@@ -210,8 +203,8 @@ xyz
   [(t "op" "eval") (t "code" "*ns*") (t "id" "1")]
 
   "filter"
-  (filter even? [1 2 3 4 5]) [2 4]
-  (filter odd? [1 2 3 4 5]) [1 3 5])
+  (filter even? [1 2 3 4 5]) '(2 4)
+  (filter odd? [1 2 3 4 5]) '(1 3 5))
 
 (tests "threading macros"
 
@@ -229,10 +222,10 @@ xyz
                                              (map inc [1 2 3]))
   (->> [1 2 3]
        (map inc)
-       (filter odd?)) [3]
+       (filter odd?))  '(3)
   (macroexpand (-> 3
-           (+ 1 2)
-           (inc))) '(inc (+ 3 1 2))
+                   (+ 1 2)
+                   (inc))) '(inc (+ 3 1 2))
   (-> 3
       (+ 1 2)
       (inc)) 7)
@@ -292,7 +285,7 @@ xyz
   ;;     "return-value")) 1)
 
   (tests "Multimethods"
-    (defmulti mymulti identity) nil
+    (defmulti mymulti identity) #'language-test/mymulti
     (defmethod mymulti "match"
       [v] "match") nil
     (defmethod mymulti "default"
@@ -301,7 +294,7 @@ xyz
     (mymulti "match") "match"
     (mymulti "other") "default" ;; is expected to fall back to the default
 
-    (defmulti mul *) nil ;; or equivalently just *
+    (defmulti mul *) #'language-test/mul
     (defmethod mul 0
       [& args] 0) nil
     (defmethod mul 10
@@ -324,24 +317,23 @@ xyz
     (try "hello") "hello"
 
     "try expressions"
-    (try
-      "string"
-      :catch "something else") "string"
-    (try
-      :catch "error") nil
-    (try
-      :catch "error"
-      :finally "cleanup") nil
+    (try "string"
+      (catch "something else")) "string"
+    (try nil
+      (catch "error")) nil
+    (try nil
+      (catch "error")
+      (finally "cleanup")) nil
     (try
       something ; `something` is not defined
-      :catch "There was an exception"
-      :finally "Doin' the cleanup") "There was an exception"
-    (try something true
-         :catch false) false
+      (catch "There was an exception")
+      (finally "Doin' the cleanup")) "There was an exception"
+    (try (do something true)
+         (catch false)) false
     (try
-      "first thing"
-      (* 3 4)
-      :catch 5) 12)
+      (do "first thing"
+          (* 3 4))
+      (catch 5)) 12)
 
 (tests "interoperability"
   "eval"
@@ -357,12 +349,17 @@ xyz
   (py/eval "1 + 2") 3
 
   "calling methods on objects"
-  (.append 3 []) [3]
+  (.append [] 3) [3]
   ;; (do (def c [3 4 45 3 23 1])
   ;;     (.sort c)
   ;;     c) [1 3 3 4 23 45]
 
   ;; (py/dir [1 2 3]) {}
+
+  "new"
+  (new py/tuple [1 2 3]) (t 1 2 3)
+  ;; to add to the reader:
+  ;; (py/tuple. [1 2 3]) (t 1 2 3)
   )
 
 (tests "metaprogramming"
@@ -383,7 +380,7 @@ xyz
 
   ;; ::passing
   "sexp equality testing"
-  '() (sexp) ; both methods are equivalent
+  '() (list) ; both methods are equivalent
 
   "quoting"
   '() (quote ())
@@ -391,14 +388,13 @@ xyz
   "quasiquoting and its expansion"
   `(1 2 3) (quote (1 2 3))
   `(1 2 3 ~(+ 2 2)) '(1 2 3 4)
-  `(1 2 3 ~@[1 2 3]) '(1 2 3 1 2 3)
 
-  "named parameters in vectors"
-  [:named 3 :other 3] [:named 3 :other 3]
+  ;; this wouldnt work if the spliced elem was a vector, 
+  ;; need to fix the concat and cons methods for vectors
+  `(1 2 3 ~@'(1 2 3)) '(1 2 3 1 2 3)
 
-  ;; "compatibility of quasiquoting with named parameters"
-  ;; `(1 2 3 :named 2) '(1 2 3 :named 2)
-  ;; `(1 2 3 ~@(sexp :named "value")) '(1 2 3 4 :named "value")
+  `(1 2 3 :named 2) '(1 2 3 :named 2)
+  `(1 2 3 ~@(list :named "value")) '(1 2 3 :named "value")
   ;; ::failing
   ;; '() (sexp 1)
   ;; `(1 2 3 :named 2) '(1 2 3 :named 4)

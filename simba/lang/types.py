@@ -1,16 +1,12 @@
-"""
-The data types for the Simba interpreter.
-Many data types are declared as aliases for the benefit of being able to call isinstance() to determine type (Maybe this is a bad idea).
-"""
 from re import split
-from simba.simba_exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
+from simba.exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
 import pyrsistent as p
 
 class Keyword(str): pass
-List = p.PList
-makeList = p.l
+
 Vector = p.PVector
 Map = p.PMap
+Map.create = p.pmap
 
 def make_meta_map(m) -> Map:
     # the m should be evaluated
@@ -39,7 +35,7 @@ class Symbol:
             if split_str[0] == '': raise SimbaSyntaxError("A symbol cannot be empty.")
             self.namespace = None
             self.name = split_str[0]
-        self.meta = None
+        self.meta = p.pmap()
     def __str__(self):
         if self.namespace: return '/'.join([self.namespace, self.name])
         else: return self.name
@@ -50,12 +46,40 @@ class Symbol:
         if __o.name == self.name and __o.namespace == self.namespace: return True
         return False
     def withMeta(self, m):
-        self.meta = make_meta_map(m)
+        self.meta = self.meta | make_meta_map(m)
         return self
 
+class Unbound: pass
+
 class Var:
-    def __init__(self):
-        pass
+    """If a Var is static it means that its value is the same regardless of the thread.
+    A dynamic Var can have different values depending on the thread.
+    By default Vars are static, as access is faster for static Vars.
+
+    Currently the implementation only supports static Vars.
+    """
+    def __init__(self, ns, sym:Symbol, root = Unbound):
+        self.ns = ns
+        self.sym = sym
+        # self.dynamic = False
+        # self.threadBound = False
+        self.root = root
+        self.meta = p.pmap({Keyword('name'): sym, Keyword('ns'): ns})
+    def get(self):
+        return self.deref()
+    def set(self, v):
+        self.root = v
+    def deref(self):
+        return self.root
+    # isMacro, isPublic ...
+    def __repr__(self):
+        return f"#'{self.ns.name}/{self.sym.name}"
+    # def set_dynamic(self, b = True):
+    #     self.dynamic = b
+    #     return self
+    def withMeta(self, m):
+        self.meta = self.meta | make_meta_map(m)
+        return self
 
 # Symbolic Data Types
 
@@ -124,25 +148,25 @@ class Environment():
         self.outer = outer
         self.names = {} if names is None else names
         self.ns = outer.ns
-    def get(self, symbol):
+    def get(self, symbol, deref_var = True):
         """Looks for a binding, first in current env, and then in outer, and so on.
         Return the value bound to the given symbol."""
         n = symbol.name
         # 1. if the symbol is namespace-qualified, look in the appropriate namespace
         if symbol.namespace is not None:
-            self.ns.get(symbol)
+            self.ns.get(symbol, deref_var = deref_var)
         # 2. else look in the local names
         if symbol.name in self.names:
             return self.names[n]
         # 3. if not found, look in outer envs
         else:
-            return self.outer.get(symbol)
+            return self.outer.get(symbol, deref_var = deref_var)
         # NB: You only want to look for referred names at the ns level
     def set(self, symbol, val):
         if symbol.namespace: raise SimbaException(f"Illegal definition of the namespaced symbol `{symbol.namespace}/{symbol.name}` in a let statement.")
         self.names[symbol.name] = val
 
-from simba.base_functions import repl_env
+from simba.lang.RT import repl_env
 
 class Namespace():
     """Just like an environment except that it has a dictionary of required and included namespaces.
@@ -158,7 +182,7 @@ class Namespace():
         if symbol.namespace is not None and symbol.namespace != self.name:
             raise ImmutableBindingException(f"Cannot mutate the binding `{symbol}` from the current namespace {self.name}.")
         self.names[symbol.name] = value
-    def get(self, symbol):
+    def get(self, symbol, deref_var = True):
         """Looks for a binding in namespace.
         If the binding is namespace-qualified and doesn't exist in that ns, throws an error.
         Else, if the binding doesn't exist, throws an error"""
@@ -169,18 +193,24 @@ class Namespace():
             try:
                 # makes sure the binding exists in the external namespace, 
                 # otherwise throwing an error is the expected behavior
-                return self.namespaces[ns].names[n]
+                if isinstance(v := self.namespaces[ns].names[n], Var) and deref_var:
+                    return v.deref()
+                else:
+                    return r
             except KeyError:
                 raise UnresolvedSymbolError(f"\n\tThe symbol `{symbol}` could not be found.\n\tMake sure the namespace is correctly imported and the symbol exists in that namespace.")
         # 2. else look in current ns
         # print(self.name)
         if n in self.names:
-            # print(f"{symbol} is in names")
-            return self.names[n]
+            if isinstance(v := self.names[n], Var) and deref_var:
+                return v.deref()
+            return v
         # 3. lastly, look in the referred namespaces
         for refd_ns in self.referred:
             if n in refd_ns.names:
-                return refd_ns.names[n]
+                if isinstance(v := refd_ns.names[n], Var) and deref_var:
+                    return v.deref()
+                return v
         raise UnresolvedSymbolError(symbol)
     def require_ns(self, ns):
         self.namespaces[ns.name] = ns

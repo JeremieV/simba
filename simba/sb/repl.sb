@@ -1,7 +1,7 @@
 (ns nrepl)
 
 (defmacro in-ns [name]
-  `(ns ~(at 1 name)))
+  `(ns ~(second name)))
 
 (import socket)
 (import bencodepy)
@@ -9,7 +9,7 @@
 (import traceback)
 
 (def host "127.0.0.1")
-(def port 58562)
+(def port 58550)
 (def debug false)
 
 (def *running* true)
@@ -17,8 +17,8 @@
 (def *sessions* [])
 (def *session* "")
 
-(defn create-session []
-  :doc "Returns a new uuid string"
+(defn ^{:doc "Returns a new uuid string"} 
+  create-session []
   (str (uuid/uuid4)))
 
 (defn switch-to-new-session []
@@ -33,37 +33,37 @@
 
 (defn decode [m]
   (if (instance? m bytes)
-    (.decode "utf-8" m)
+    (.decode m "utf-8")
     m))
 
 (defn encode [r] (bencodepy/encode (thaw r)))
 
-(defn send [response conn]
-  :doc "Takes care of encoding the response and sending multiple messages at a time."
+(defn ^{:doc "Takes care of encoding the response and sending multiple messages at a time."} 
+  send [response conn]
   (if (vector? response)
-    (map (fn [r] (.sendall (encode r) conn))
+    (map (fn [r] (.sendall conn (encode r)))
          response)
-    (.sendall (encode response) conn)))
+    (.sendall conn (encode response))))
 
 (defn start-server [host port]
   (prn "nREPL server started on port " port " on host " host " - nrepl://" host ":" port "\n")
 
   (with [s (socket/socket socket/AF_INET socket/SOCK_STREAM)]
-    (.bind (t host port) s)
-    (.listen s)
-    (let [accept (.accept s)
-          conn (first accept)
-          addr (second accept)]
-      (with [conn conn]
-        (while *running*
-          (let [data (.recv 1024 conn)
-                decoded (->> (bencodepy/decode data)
-                             (map (partial map decode))
-                             hash-map)
-                _ (when debug (print "<--" decoded))
-                response (handle decoded)
-                _ (when debug (print "-->" response))]
-            (send response conn)))))))
+        (.bind s (t host port))
+        (.listen s)
+        (let [accept (.accept s)
+              conn (first accept)
+              addr (second accept)]
+          (with [conn conn]
+                (while *running*
+                  (let [data (.recv conn 1024)
+                        decoded (->> (bencodepy/decode data)
+                                     (map (partial map decode))
+                                     hash-map)
+                        _ (when debug (print "<--" decoded))
+                        response (handle decoded)
+                        _ (when debug (print "-->" response))]
+                    (send response conn)))))))
 
 (defn done-message [message]
   {:id (at "id" message)
@@ -101,17 +101,17 @@
                      py/print_sexp)}
         (done-message message)]
 
-       :catch
-       [{:id (at "id" message)
-         :session (get-session)
-         :err (+ "Execution error in " (py/print_sexp *ns*) ".\n"
-                 (str *error*))}
-        {:ex "class java.lang.Exception"
-         "'root-ex'" "class java.lang.Exception"
-         :id (at "id" message)
-         :session (get-session)
-         :status ["eval-error"]}
-        (done-message message)]))
+       (catch
+        [{:id (at "id" message)
+          :session (get-session)
+          :err (+ "Execution error in " (py/print_sexp *ns*) ".\n"
+                  (str *error*))}
+         {:ex "class java.lang.Exception"
+          "'root-ex'" "class java.lang.Exception"
+          :id (at "id" message)
+          :session (get-session)
+          :status ["eval-error"]}
+         (done-message message)])))
 
 (defmethod handle "clone"
   [message]

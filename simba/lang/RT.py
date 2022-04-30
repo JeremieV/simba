@@ -9,8 +9,9 @@ from math import prod
 from types import LambdaType
 
 import pyrsistent
-from simba.simba_types import Map, Vector, List, Symbol, makeList
-from simba.simba_exceptions import SimbaException
+from simba.lang.types import Map, Vector, Symbol
+from simba.lang.PersistentList import PersistentList
+from simba.exceptions import SimbaException
 import simba.helpers as helpers
 import time
 import toolz
@@ -51,7 +52,7 @@ def sb_seq(seqable):
         return s
     elif isinstance(seqable, dict):
         return pyrsistent.pvector(seqable.items())
-    elif isinstance(seqable, List):
+    elif isinstance(seqable, PersistentList):
         return pyrsistent.pvector(seqable)
     elif seqable is None:
         return None
@@ -63,17 +64,17 @@ def sb_prepend_sexp(e, seq):
     Returns an object of the same type as the second argument.
     If second arg is None, defaults to a SymbolicExpression"""
     if seq is None:
-        return makeList(e)
+        return PersistentList.create(e)
     # elif isinstance(seq, tuple):
     #     return (e,) + seq
     # elif isinstance(seq, list):
     #     return [e] + seq
     # elif isinstance(seq, SymbolicExpression):
-    return makeList(e) + makeList(*seq)
+    return PersistentList.create(e) + PersistentList.create(*seq)
 
-def sb_generic_concat(a, b):
+def sb_generic_concat(a, b = None):
     """Python has no built-in way of concatenating sequences of different types.
-    Howver, this is often needed in Simba to perform generic operations on sequences.
+    However, this is often needed in Simba to perform generic operations on sequences.
     This function covers the built-in Python sequences and always returns a sequence
     of the same type as the first value."""
     # TODO: also define a function that works on n parameters
@@ -81,14 +82,14 @@ def sb_generic_concat(a, b):
         return a
     if a is None:
         return b
-    if type(a) == type(b):
-        return a+b
+    if isinstance(a, str):
+        return a + str(b)
     elif isinstance(a, tuple):
         return a + tuple(b)
     elif isinstance(a, list):
         return a + list(b)
-    elif isinstance(a, List):
-        return a + makeList(*b)
+    elif isinstance(a, PersistentList):
+        return a + PersistentList.create(*b)
 
 def sb_uniform_access(*attrs):
     """This implements the Uniform Access Principle.
@@ -109,19 +110,11 @@ def sb_uniform_access(*attrs):
             return a
     raise SimbaException(f"{obj} has no attribute {attr}")
 
-# def dot_form(target, member, *attrs):
-#     # assumes the member to be a symbol, otherwise will throw
-#     member = member.name
-#     args = attrs[2:]
-#     if member.name.startswith('-'):
-#         return getattr(target, member)
-#     if hasattr(target, member):
-#         a = getattr(target, member)
-#         if callable(a) and not isinstance(a, LambdaType):
-#             return eval(f"target.{member}")(*args)
-#         else:
-#             return a
-#     raise SimbaException(f"{target} has no attribute {member}")
+def cons(x, seq):
+    if seq is None:
+        return PersistentList.create(x)
+    if hasattr(seq, 'cons'):
+        return seq.cons(x)
 
 def throw(e): raise e
 
@@ -177,7 +170,6 @@ repl_env = {
     'Vector': Vector,
     'vector': pyrsistent.v,
     'tuple': tuple,
-    'list': makeList,
     't': lambda *t: t,
     'HashMap': Map,
     'hash-map': pyrsistent.pmap,
@@ -197,7 +189,7 @@ repl_env = {
     # - special syntax for get, set, del
     # - universal access principle, such that if attr doesn't exist, then tries to call method
     'get-attr': sb_uniform_access, # lambda attr, obj: obj.__getattribute__(attr),
-    'set-attr': lambda attr, value, obj: obj.__delattr__(attr, value),
+    'set!': lambda obj, attr, value: obj.__setattr__(attr, value),
     'del-attr': lambda attr, obj: obj.__delattr__(attr),
 
     # sequences

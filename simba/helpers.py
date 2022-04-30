@@ -1,5 +1,5 @@
 import os
-from simba.simba_exceptions import MultipleNamespacesError, NoNamespaceError
+from simba.exceptions import MultipleNamespacesError, NoNamespaceError
 import simba.sexprs_reader_printer as sexprs_reader_printer
 
 def reverse(lst):
@@ -84,12 +84,13 @@ def find_ns(name, ast_list):
     return res[0]
 
 def return_ns(name, ast_list):
-    from simba.simba_types import Symbol, List
+    from simba.lang.types import Symbol
+    from simba.lang.PersistentList import PersistentList
     res = []
     is_found = False
     adding = False
     for exp in ast_list:
-        cond = isinstance(exp, List)
+        cond = isinstance(exp, PersistentList)
         if cond and exp[0] == Symbol("ns") and exp[1] == Symbol(name):
             if is_found: raise MultipleNamespacesError(f"Multiple namespaces of the name {name} were found.")
             is_found = True
@@ -102,12 +103,13 @@ def return_ns(name, ast_list):
     return res
 
 def return_test_ns(ast_list):
-    from simba.simba_types import Symbol, List
+    from simba.lang.types import Symbol
+    from simba.lang.PersistentList import PersistentList
     res = []
     is_test = False
     is_found = False
     for exp in ast_list:
-        cond = isinstance(exp, List)
+        cond = isinstance(exp, PersistentList)
         if cond and exp[0] == Symbol("ns") and isinstance(exp[1], Symbol) and exp[1].name[-5:] == "-test":
             res.append([])
             is_test = True
