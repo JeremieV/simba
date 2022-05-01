@@ -14,7 +14,7 @@ import pyrsistent as p
 # import antlr4
 import simba.sexprs_reader_printer as sexprs_reader_printer
 # import src.simba.dotexprs_reader_printer
-from simba.lang.types import Symbol, Map, Vector, Namespace, Environment, Keyword, Var
+from simba.lang.types import PersistentVector, Symbol, PersistentMap, PersistentVector, Namespace, Environment, Keyword, Var
 from simba.lang.PersistentList import PersistentList
 import simba.helpers as helpers
 import simba.sb as sb
@@ -37,7 +37,7 @@ def read_string(string):
 def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
     return syntax.to_string(sexp, lb=lb)
 
-from simba.exceptions import SimbaException, MultipleDispatchException, MultiMethodException, SimbaSyntaxError, UnresolvedSymbolError
+from simba.exceptions import IllegalStateException, SimbaException, MultipleDispatchException, MultiMethodException, SimbaSyntaxError, UnresolvedSymbolError
 
 def bind_fn_args(fn_args:tuple, _args: tuple) -> dict:
     names = {}
@@ -53,12 +53,14 @@ class Function:
     """Functions are anonymous, but may contain names in their metadata.
     Any Function can be promoted to a multimethod with the `register` method.
     """
-    def __init__(self, params, ast, bindings):
+    def __init__(self, params, ast, bindings, optname = None, optmap = None):
         self.args = params
         self.ast = ast
         self.bindings = bindings # the bindings should hold the bindings from the args and closure
+        self.name = optname
+        self.optmap = optmap
     def register(self, fn):
-        return Multi(self).register(fn) # add meta
+        return OverloadedFn(self).register(fn) # add meta
     def __call__(self, *e_p_args):
         res =  None
         env = Environment(
@@ -71,7 +73,7 @@ class Function:
 
 def signature_match(signature:tuple, args:tuple):
     return True if Symbol('&') in signature else len(args) == len(signature)
-class Multi:
+class OverloadedFn:
     """Not to be confused with a MultiFn, this is the type that allows for variadic dispatch."""
     def __init__(self, fn:Function):
         self.method_table: PersistentList[Tuple[Tuple, Function]] = []
@@ -108,7 +110,7 @@ class MultiFn:
         self.method_table[dispatch_value] = fn
     def methods(self):
         """Returns a list of the registered dispatch values on the multimethod."""
-        return p.pvector(self.method_table.keys())
+        return PersistentVector.create(self.method_table.keys())
     # def __call__(self):
     #     dispatch_val = self.dispatch_fn()
     #     # if val not in dict dispatch to the default fn?
@@ -146,7 +148,7 @@ def simba_repl(multi = False):
 
 def quasiquote(ast):
     """The quasiquote expansion algorithm"""
-    if isinstance(ast, Symbol) or isinstance(ast, Map): 
+    if isinstance(ast, Symbol) or isinstance(ast, PersistentMap): 
         return PersistentList.create(Symbol('quote'), ast)
     elif isinstance(ast, PersistentList) and ast[0] == Symbol("unquote"):
         return ast[1]
@@ -223,8 +225,6 @@ def eval_primitive(sexp, env):
         elif sexp.name == "*env*":
             return env
         if sexp.namespace:
-            if sexp.namespace == "py":
-                return eval(sexp.name)
             try:
                 resolution = env.get(Symbol(sexp.namespace))
                 if isinstance(resolution , ModuleType) or isinstance(resolution, type):
@@ -232,12 +232,14 @@ def eval_primitive(sexp, env):
                 # here it would be cleaner if a symba ns was the same as a python module, just a var in global scope
             except UnresolvedSymbolError:
                 pass # do nothing
-        try: return env.get(sexp)
-        except KeyError: raise UnresolvedSymbolError(sexp)
-    elif isinstance(sexp, Vector):
-        return p.pvector([eval_sexp(e, env) for e in sexp])
-    elif isinstance(sexp, Map):
-        return p.pmap({eval_sexp(key, env): eval_sexp(sexp[key], env) for key in sexp})
+        try:
+            return env.get(sexp)
+        except KeyError:
+            raise UnresolvedSymbolError(sexp)
+    elif isinstance(sexp, PersistentVector):
+        return PersistentVector.create([eval_sexp(e, env) for e in sexp])
+    elif isinstance(sexp, PersistentMap):
+        return PersistentMap.create({eval_sexp(key, env): eval_sexp(sexp[key], env) for key in sexp})
     else: # if the value is an atomic data type, cannot evaluate further
         return sexp
 
@@ -248,6 +250,10 @@ def eval_sexp(sexp, env, macro_call = False):
     By default, execution starts in the `None` namespace, which corresponds to the standard library.
     """
     global loaded_ns
+    in_loop   = False
+    loop_sexp = None
+    loop_env  = None
+    loop_args = tuple()
     while True:
         # print(print_sexp(sexp))
         if not isinstance(sexp, PersistentList):
@@ -263,6 +269,7 @@ def eval_sexp(sexp, env, macro_call = False):
         if len(sexp) == 0:
             return None
         ## Special Forms: ##
+        # NOTE: is this needed?
         if isinstance(sexp[0], PersistentList):
             # sexp[0] = eval_sexp(sexp[0], env)
             sexp = PersistentList.create(eval_sexp(sexp[0], env), *sexp[1:])
@@ -296,24 +303,35 @@ def eval_sexp(sexp, env, macro_call = False):
                     continue # TCO
                 else: return None
         elif is_s and "fn" == head.name:
-            arg1 = sexp[1]
-            if isinstance(arg1, Vector):
+            offset = 0
+            fn_name = None
+            fn_optmap = None
+            # optional name
+            if isinstance(sexp[1], Symbol):
+                offset = 1
+                fn_name = sexp[1]
+            # optional option map
+            if len(sexp) >= 3 + offset and isinstance(sexp[2+offset], PersistentMap):
+                fn_optmap = eval_sexp(sexp[2+offset], env)
+            if isinstance(sexp[1+offset], PersistentVector):
                 # anonymous function (single method declaration)
-                argVector, body = sexp[1], sexp[2:]
+                argVector, body = sexp[1+offset], sexp[2+offset:]
                 # what the closure should do is:
                 # - gather all the free variables
                 # - point to the local bindings in `bindings`
                 bindings = env # this is temporary:
                 # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
                 # in the future, the bindings will be only the ones references in the closure
-                return Function(argVector, body, bindings)
-            elif isinstance(arg1, PersistentList):
+                return Function(argVector, body, bindings, optname = fn_name, optmap = fn_optmap)
+            elif isinstance(sexp[1+offset], PersistentList):
                 # anonymous multimethod (with multiple method declarations)
-                fn = Function(sexp[1][0], sexp[1][1:], env)
-                for exp in sexp[2:]:
+                fn = Function(sexp[1+offset][0], sexp[1+offset][1:], env, optname = fn_name, optmap = fn_optmap)
+                for exp in sexp[2+offset:]:
+                    # NOTE: here we do not attempt to parse optmap
                     # argVector, body = exp[0], exp[1:]
                     fn = fn.register(Function(exp[0], exp[1:], env))
                 return fn
+            raise SimbaSyntaxError(f"Wrong argument pattern for `fn` in {print_sexp(sexp)}")
         elif is_s and "do" == head.name:
             if len(sexp) == 1: return None
             for e in sexp[1:-1]:
@@ -323,7 +341,7 @@ def eval_sexp(sexp, env, macro_call = False):
         elif is_s and "let" == head.name:
             # creates a new environment and binds the values to it successively (in order)
             # evaluates the body in an implicit do
-            if len(sexp) == 2: raise SimbaSyntaxError(f"\n\t`let` form is missing a body in:\n\t{print_sexp(sexp)}")
+            if len(sexp) == 2: return None
             vec = sexp[1]
             env = Environment(outer = env)
             for i in range(0, len(vec), 2):
@@ -332,6 +350,37 @@ def eval_sexp(sexp, env, macro_call = False):
                 eval_sexp(exp, env)
             sexp = sexp[-1]
             continue # TCO
+        elif is_s and "loop" == head.name:
+            # loop is like let in that it provides immutable bindings
+            # however it alters the state to know that we are in a loop
+            # to understand what a tail position is, refer to:
+            # http://www.r6rs.org/final/html/r6rs/r6rs-Z-H-14.html#node_sec_11.20
+            if len(sexp) == 2: return None
+            vec = sexp[1]
+            env = Environment(outer = env)
+            in_loop   = True
+            loop_sexp = PersistentList.create(Symbol('do'), *sexp[2:])
+            loop_env  = env
+            loop_args = []
+            for i in range(0, len(vec), 2):
+                env.set(vec[i], eval_sexp(vec[i+1], env))
+                loop_args.append(vec[i])
+            for exp in sexp[2:-1]:
+                eval_sexp(exp, env)
+            sexp = sexp[-1]
+            continue # TCO
+        elif is_s and "recur" == head.name:
+            if not in_loop: raise IllegalStateException(f"\nCannot use recur outside of a tail position in: \n {print_sexp(sexp)}.")
+            # evaluate the arguments in the old env
+            evaled_args = [eval_sexp(e, env) for e in sexp[1:]]
+            # for i in range(len(loop_args)):
+            #     env.set(loop_args[i], evaled_args[i])
+            sexp = loop_sexp
+            env  = loop_env
+            # bind the new values to the new env
+            env.names = bind_fn_args(loop_args, evaled_args)
+            # return to the top of the loop expression
+            continue
         elif is_s and "." == head.name:
             # assumes the member to be a symbol, otherwise will throw
             target = eval_sexp(sexp[1], env)
@@ -344,10 +393,16 @@ def eval_sexp(sexp, env, macro_call = False):
             args = [eval_sexp(arg, env) for arg in args]
             if member.startswith('-'):
                 return getattr(target, member)
+            # from the Clojure doc: (modified)
+            # If the first operand is a symbol that resolves to a class [OR A MODULE] name, 
+            # the access is considered to be to a static member of the named class. 
+            # Note that nested classes are named EnclosingClass$NestedClass, per the 
+            # JVM spec. Otherwise it is presumed to be an instance member and the first 
+            # argument is evaluated to produce the target object.
             if hasattr(target, member):
                 a = getattr(target, member)
-                if callable(a) and not isinstance(a, LambdaType):
-                    return eval(f"target.{member}")(*args)
+                if not isinstance(target, type) and not isinstance(target, ModuleType) and callable(a):
+                    return a(*args)
                 else:
                     return a
             raise SimbaException(f"{target} has no attribute {member}")
@@ -396,7 +451,6 @@ def eval_sexp(sexp, env, macro_call = False):
             # includes the base library and imports all classes from java.lang
             require(['base'], env.ns, include = True)
             # requires/refers other namespaces and vars as specified
-            # dadi
             break
         elif is_s and "require" == head.name:
             require([sexp[1].name], env.ns)
@@ -420,7 +474,7 @@ def eval_sexp(sexp, env, macro_call = False):
                 evaluated_args = sexp
                 macro_call = False
             matched = False
-            if isinstance(fun := evaluated_args[0], Multi):
+            if isinstance(fun := evaluated_args[0], OverloadedFn):
                 for tup in fun.method_table:
                     if signature_match(tup[0], evaluated_args[1:]):
                         fun = evaluated_args[0] = tup[1]
@@ -443,6 +497,11 @@ def eval_sexp(sexp, env, macro_call = False):
                     outer = fun.bindings,
                     names = bind_fn_args(fun.args, evaluated_args[1:]) # args are the names of the env
                 )
+                # mark that we are inside a loop
+                in_loop   = True
+                loop_sexp = PersistentList.create(Symbol('do'), *fun.ast)
+                loop_env  = env
+                loop_args = fun.args
                 # if the body is empty return `nil`
                 if len(fun.ast) == 0:
                     return None

@@ -1,3 +1,11 @@
+;   Copyright (c) Rich Hickey. All rights reserved.
+;   The use and distribution terms for this software are covered by the
+;   Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
+;   which can be found in the file epl-v10.html at the root of this distribution.
+;   By using this software in any fashion, you are agreeing to be bound by
+;   the terms of this license.
+;   You must not remove this notice, or any other, from this software.
+
 (ns ^{:doc "Collection of functions and macros to be included by default with the Simba language."
       :date-created "27 January 2022"
       :author "Jérémie Vaney"}
@@ -5,7 +13,9 @@
 
 ;; IMPORTS -- temporary
 
+(def py (py-exec "import builtins;builtins"))
 (def simba.lang.RT (py-exec "import simba.lang.RT;simba.lang.RT"))
+(def simba.lang.types (py-exec "import simba.lang.types;simba.lang.types"))
 (def simba.lang.PersistentList (py-exec "import simba.lang.PersistentList;simba.lang.PersistentList"))
 
 ;; CONTROL FLOW
@@ -14,7 +24,7 @@
   ^{:arglists '([& items])
     :doc "Creates a new list containing the items."
     :added "1.0"}
-  list (. simba.lang.PersistentList/PersistentList create))
+  list (. simba.lang.PersistentList creator))
 
 (def
   ^{:arglists '([x seq])
@@ -22,7 +32,7 @@
     the rest."
     :added "1.0"
     :static true}
-  cons simba.lang.RT/cons)
+  cons (fn ^:static cons [x seq] (. simba.lang.RT (cons x seq))))
 
 (def ^{:doc "Shorthand for defining functions."
        :macro true}
@@ -54,14 +64,14 @@
 (defmacro comment [& body]
   nil)
 
-(defmacro ^{:doc "Evaluates test. If logical true, evaluates body in an implicit do."} 
+(defmacro ^{:doc "Evaluates test. If logical true, evaluates body in an implicit do."}
   when
   [condition & clauses]
   `(if ~condition
      (do ~@clauses)
      nil))
 
-(defmacro ^{:doc "Evaluates test. If logical false, evaluates body in an implicit do."} 
+(defmacro ^{:doc "Evaluates test. If logical false, evaluates body in an implicit do."}
   when-not
   [condition & clauses]
   `(if ~condition
@@ -85,7 +95,7 @@
             :example '(do (def counter 10000)
                           (while (not (zero? counter))
                             (def counter (dec counter)))
-                          (print counter))} 
+                          (print counter))}
   while
   [condition & body]
   `(when ~condition
@@ -93,7 +103,7 @@
      (while ~condition ~@body)))
 
 (defmacro ^{:doc "Shorthand to return a value after defining it.
-        Analog of the Python 'walrus' operator."} 
+        Analog of the Python 'walrus' operator."}
   assign
   [name value]
   `(do (def ~name ~value) ~name))
@@ -103,10 +113,104 @@
   import
   (fn [module-name]
     `(def ~module-name
-       (py-exec ~(+ "import " (str module-name) "; " (str module-name))))))
+       (py-exec ~(+ "import " (py/str module-name) "; " (py/str module-name))))))
 
 (defmacro new [obj & args]
   (obj ~@args))
+
+(def
+  ^{:arglists '([coll])
+    :doc "Returns the first item in the collection. Calls seq on its
+    argument. If coll is nil, returns nil."
+    :added "1.0"
+    :static true}
+  first (fn ^:static first [coll] (. simba.lang.RT (first coll))))
+
+(def
+  ^{:arglists '([coll])
+    :tag simba.lang.ISeq
+    :doc "Returns a seq of the items after the first. Calls seq on its
+  argument.  If there are no more items, returns nil."
+    :added "1.0"
+    :static true}
+  next (fn ^:static next [x] (. simba.lang.RT (next x))))
+
+(def
+  ^{:arglists '([coll])
+    :tag simba.lang.ISeq
+    :doc "Returns a possibly empty seq of the items after the first. Calls seq on its
+  argument."
+    :added "1.0"
+    :static true}
+  rest (fn ^:static rest [x] (. simba.lang.RT (more x))))
+
+(def
+  ^{:arglists '([] [coll] [coll x] [coll x & xs])
+    :doc "conj[oin]. Returns a new collection with the xs
+    'added'. (conj nil item) returns (item).
+    (conj coll) returns coll. (conj) returns [].
+    The 'addition' may happen at different 'places' depending
+    on the concrete type."
+    :added "1.0"
+    :static true}
+  conj (fn ^:static conj
+         ([] [])
+         ([coll] coll)
+         ([coll x] (simba.lang.RT/conj coll x))
+         ([coll x & xs]
+          (if xs
+            (recur (simba.lang.RT/conj coll x) (first xs) (next xs))
+            (simba.lang.RT/conj coll x)))))
+
+(def
+  ^{:arglists '([^Class c x])
+    :doc "Evaluates x and tests if it is an instance of the class
+    c. Returns true or false"
+    :added "1.0"}
+  instance? (fn instance? [^Class c x] (py/isinstance x c)))
+
+(def String py/str)
+
+(def
+  ^{:arglists '([x])
+    :doc "Return true if x is a String"
+    :added "1.0"
+    :static true}
+  string? (fn ^:static string? [x] (instance? String x)))
+
+(def
+  ^{:arglists '([x])
+    :doc "Return true if x implements IPersistentMap"
+    :added "1.0"
+    :static true}
+  map? (fn ^:static map? [x] (instance? simba.lang.types/PersistentMap x)))
+
+(def
+  ^{:arglists '([x])
+    :doc "Return true if x implements IPersistentVector"
+    :added "1.0"
+    :static true}
+  vector? (fn ^:static vector? [x] (instance? simba.lang.types/PersistentVector x)))
+
+(def
+  ^{:arglists '([map key val] [map key val & kvs])
+    :doc "assoc[iate]. When applied to a map, returns a new map of the
+    same (hashed/sorted) type, that contains the mapping of key(s) to
+    val(s). When applied to a vector, returns a new vector that
+    contains val at index. Note - index must be <= (count vector)."
+    :added "1.0"
+    :static true}
+  assoc
+  (fn ^:static assoc
+    ([map key val] (simba.lang.RT/assoc map key val))
+    ([map key val & kvs]
+     (let [ret (simba.lang.RT/assoc map key val)]
+       (if kvs
+         (if (next kvs)
+           (recur ret (first kvs) (second kvs) (nnext kvs))
+           (throw (IllegalArgumentException.
+                   "assoc expects even number of arguments after map/vector, found odd number")))
+         ret)))))
 
 ;; METADATA
 
@@ -128,273 +232,353 @@
   with-meta (fn [x m]
               (.withMeta x m)))
 
+(def
+  ^{:arglists '([coll])
+    :doc "Return the last item in coll, in linear time"
+    :added "1.0"
+    :static true}
+  last (fn ^:static last [s]
+         (if (next s)
+           (recur (next s))
+           (first s))))
+
+(def
+  ^{:arglists '([coll])
+    :doc "Return a seq of all but the last item in coll, in linear time"
+    :added "1.0"
+    :static true}
+  butlast (fn ^:static butlast [s]
+            (loop [ret [] s s]
+              (if (next s)
+                (recur (conj ret (first s)) (next s))
+                (seq ret)))))
+
+(def
+  ^{:doc "Same as (def name (fn [params* ] exprs*)) or (def
+    name (fn ([params* ] exprs*)+)) with any doc-string or attrs added
+    to the var metadata. prepost-map defines a map with optional keys
+    :pre and :post that contain collections of pre or post conditions."
+    :arglists '([name doc-string? attr-map? [params*] prepost-map? body]
+                [name doc-string? attr-map? ([params*] prepost-map? body) + attr-map?])
+    :added "1.0"
+    :macro true}
+  defn (fn defn [name & fdecl]
+        ;; Note: Cannot delegate this check to def because of the call to (with-meta name ..)
+         (if (instance? simba.lang.types/Symbol name)
+           nil
+           (throw (IllegalArgumentException. "First argument to defn must be a symbol")))
+         (let [m (if (string? (first fdecl))
+                   {:doc (first fdecl)}
+                   {})
+               fdecl (if (string? (first fdecl))
+                       (next fdecl)
+                       fdecl)
+               m (if (map? (first fdecl))
+                   (conj m (first fdecl))
+                   m)
+               fdecl (if (map? (first fdecl))
+                       (next fdecl)
+                       fdecl)
+               fdecl (if (vector? (first fdecl))
+                       (list fdecl)
+                       fdecl)
+              ;;  _ (print fdecl)
+               m (if (map? (last fdecl))
+                   (conj m (last fdecl))
+                   m)
+               fdecl (if (map? (last fdecl))
+                       (butlast fdecl)
+                       fdecl)
+               m (conj {:arglists (list 'quote (sigs fdecl))} m)
+               m (let [inline (:inline m)
+                       ifn (first inline)
+                       iname (second inline)]
+                  ;; same as: (if (and (= 'fn ifn) (not (symbol? iname))) ...)
+                   (if (if (simba.lang.Util/equiv 'fn ifn)
+                         (if (instance? simba.lang.Symbol iname) false true))
+                    ;; inserts the same fn name to the inline fn if it does not have one
+                     (assoc m :inline (cons ifn (cons (simba.lang.Symbol/intern (.concat (.getName ^simba.lang.Symbol name) "__inliner"))
+                                                      (next inline))))
+                     m))
+               m (conj (if (meta name) (meta name) {}) m)]
+           (list 'def (with-meta name m)
+                ;;todo - restore propagation of fn name
+                ;;must figure out how to convey primitive hints to self calls first
+								;;(cons `fn fdecl)
+                 (with-meta (cons `fn fdecl) {:rettag (:tag m)})))))
+
+;; (defn vector
+;;   "Creates a new vector containing the args."
+;;   {:added "1.0"
+;;    :static true}
+;;   ([] [])
+;;   ([a] [a])
+;;   ([a b] [a b])
+;;   ([a b c] [a b c])
+;;   ([a b c d] [a b c d])
+;;   ([a b c d e] [a b c d e])
+;;   ([a b c d e f] [a b c d e f])
+;;   ([a b c d e f & args]
+;;    (. simba.types.PersistentVector/PersistentVector (create (cons a (cons b (cons c (cons d (cons e (cons f args))))))))))
+
 ;; ;; MULTIMETHODS
 
-(defmacro defmulti [name dispatch-fn]
-  `(def ~name (py/MultiFn ~(str name) ~dispatch-fn)))
+;; (defmacro defmulti [name dispatch-fn]
+;;   `(def ~name (py/MultiFn ~(py/str name) ~dispatch-fn)))
 
-(defmacro defmethod [multi dispatch-val & body]
-  `(.register ~multi (fn ~@body) ~dispatch-val))
+;; (defmacro defmethod [multi dispatch-val & body]
+;;   `(.register ~multi (fn ~@body) ~dispatch-val))
 
-;; ---
+;; ;; ---
 
-(defmacro ^{:doc "Used to assert that certain macros are called correctly."
-            :private true}
-  assert-args
-  [& pairs]
-  `(do (when-not ~(first pairs)
-         (throw (py/IllegalArgumentException
-                 (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
-       ~(let [more (nnext pairs)]
-          (when more
-            (vector `assert-args more)))))
+;; (defmacro ^{:doc "Used to assert that certain macros are called correctly."
+;;             :private true}
+;;   assert-args
+;;   [& pairs]
+;;   `(do (when-not ~(first pairs)
+;;          (throw (py/IllegalArgumentException
+;;                  (py/str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
+;;        ~(let [more (nnext pairs)]
+;;           (when more
+;;             (vector `assert-args more)))))
 
-(defn inc [n]
-  (+ n 1))
+;; (defn inc [n]
+;;   (+ n 1))
 
-(defn dec [n]
-  (- n 1))
+;; (defn dec [n]
+;;   (- n 1))
 
-;; ;; TYPES
+;; ;; ;; TYPES
 
-(defn vector? [x]
-  (instance? x Vector))
+;; (defn list? [x]
+;;   (instance? x simba.lang.PersistentList/PersistentList))
 
-(defn map? [x]
-  (instance? x HashMap))
+;; ;; ;; SEQUENCES
 
-(defn list? [x]
-  (instance? x simba.lang.PersistentList/PersistentList))
+;; (def seq simba.lang.RT/sb_seq)
 
-;; ;; SEQUENCES
+;; (def freeze py/p.freeze)
+;; (def thaw py/p.thaw)
 
-(def seq simba.lang.RT/sb_seq)
+;; (defn ^{:doc "Returns an empty sequence of the type of s."} 
+;;   empty
+;;   [s]
+;;   (cond
+;;     (vector? s) []
+;;     (map? s) {}
+;;     true ((type s))))
 
-(def freeze py/p.freeze)
-(def thaw py/p.thaw)
+;; (defn rest [s]
+;;   (if (seq s)
+;;     (between 1 nil s)
+;;     (empty s)))
 
-(defn ^{:doc "Returns an empty sequence of the type of s."} 
-  empty
-  [s]
-  (cond
-    (vector? s) []
-    (map? s) {}
-    true ((type s))))
+;; (defn rrest [s]
+;;   (rest (rest s)))
 
-(defn first [seq]
-  (at 0 seq))
+;; (defn next [s]
+;;   :doc "next is like rest except that it returns nil on an empty seq"
+;;   (if (seq s)
+;;     (between 1 nil s)
+;;     nil))
 
-(defn rest [s]
-  (if (seq s)
-    (between 1 nil s)
-    (empty s)))
+;; (defn nnext [s]
+;;   (next (next s)))
 
-(defn rrest [s]
-  (rest (rest s)))
+;; (defn second [s]
+;;   (first (rest s)))
 
-(defn next [s]
-  :doc "next is like rest except that it returns nil on an empty seq"
-  (if (seq s)
-    (between 1 nil s)
-    nil))
+;; (defn take [n s]
+;;   (between 0 n s))
 
-(defn nnext [s]
-  (next (next s)))
+;; (defn take-last [n s]
+;;   (between (- n) nil s))
 
-(defn second [s]
-  (first (rest s)))
 
-(defn take [n s]
-  (between 0 n s))
+;; ;; ;; COMBINATORS
 
-(defn take-last [n s]
-  (between (- n) nil s))
+;; (def ^{:doc "Function application. Returns the result of applying f to the last argument, which has to be a sequence. Any arguments before the last are prepended to the sequence."
+;;        :signature '[f & args]}
+;;   apply
+;;   simba.lang.RT/sb_apply)
 
-;; ;; COMBINATORS
+;; (defn ^{:doc "Returns its argument."} 
+;;   identity [x]
+;;   x)
 
-(def ^{:doc "Function application. Returns the result of applying f to the last argument, which has to be a sequence. Any arguments before the last are prepended to the sequence."
-       :signature '[f & args]}
-  apply
-  simba.lang.RT/sb_apply)
+;; (def thrush (fn [a b] (b a)))
 
-(defn ^{:doc "Returns its argument."} 
-  identity [x]
-  x)
+;; (defn ^{:doc "An extended version of the bluebird combinator."}
+;;   compose
+;;   ([] identity)
+;;   ([f] f)
+;;   ([f g] (fn [& args]
+;;            (f (apply g args)))))
 
-(def thrush (fn [a b] (b a)))
+;; (defn ^{:doc "Takes a function with fewer args than normal, and returns a function that takes a variable amount of additional args. When called, the returned function calls f with args + additional args."}
+;;   partial
+;;   ([f] f)
+;;   ([f & args] (fn [& more-args]
+;;                 (apply f (concat args more-args)))))
 
-(defn ^{:doc "An extended version of the bluebird combinator."}
-  compose
-  ([] identity)
-  ([f] f)
-  ([f g] (fn [& args]
-           (f (apply g args)))))
+;; ;; ;; REDUCERS AND TRANSDUCERS
 
-(defn ^{:doc "Takes a function with fewer args than normal, and returns a function that takes a variable amount of additional args. When called, the returned function calls f with args + additional args."}
-  partial
-  ([f] f)
-  ([f & args] (fn [& more-args]
-                (apply f (concat args more-args)))))
-
-;; ;; REDUCERS AND TRANSDUCERS
-
-;; ;; PREDICATES
-
-(defn nil? [value]
-  (is nil value))
-
-(defn zero? [value]
-  (= 0 value))
-
-(defn ^{:alternative-implementation '(compose not predicate)} 
-  complement [predicate]
-  (fn [& args] (not (apply predicate args))))
-
-(defn not= [a b]
-  (not (= a b)))
-
-(defn empty? [coll]
-  (= 0 (count coll)))
-
-(defn even? [n]
-  (= (% 2 n) 0))
-
-(defn odd? [n]
-  (= (% 2 n) 1))
-
-(defn pos? [n]
-  (< 0 n))
-
-(defn neg? [n]
-  (< n 0))
-
-;; ; or and and implemented as macros
-
-;; ;; (defmacro or [& clauses]
-;; ;;   :doc "the empty disjunction is false by convention"
-;; ;;   (cond (is-empty clauses) false
-;; ;;         (= 1 (count clauses)) (first clauses)
-;; ;;         true `(do (def cl ~(first clauses))
-;; ;;                   (if cl cl (or ~@(rest clauses))))))
-
-;; ;; (defmacro and [& clauses]
-;; ;;   ;; by convention the empty conjuntion is true
-;; ;;   (sexp))
-
-;; ;; SEQUENCES
-
-(defn ^{:doc "Maps a function over a collection eagerly. It would be nice if it could be lazy.
-          Calls seq on its coll.
-          Also there is the possibility of making it a transducer."} 
-  map [f coll]
-  (let [s (seq coll)]
-    (when s
-      (cons (f (first s)) (map f (rest s))))))
-
-(defn ^{:doc "Filters over a collection eagerly. Calls seq on its argument."} 
-  filter [pred coll]
-  (let [s (seq coll)]
-    (when s
-      (let [f (first s)
-            r (rest s)]
-        (if (pred f)
-          (cons f (filter pred r))
-          (filter pred r))))))
-
-;; (defn reduce [] nil)
-;; ;; (defn reduce [f coll initial])
-
-;; ;; (defn take)
-
-;; ;; (defn partition)
-
-(defn ^{:doc "Removes the items that satisfy the predicate in coll"} 
-  remove [pred coll]
-  (filter (complement pred) coll))
-
-;; (comment
-;;   ;; a way of making a mapping transducer
-;;   ([f]
-;;    (fn [rf]
-;;      (fn
-;;        ([] (rf))
-;;        ([result] (rf result))
-;;        ([result input]
-;;         (rf result (f input)))
-;;        ([result input & inputs]
-;;         (rf result (apply f input inputs)))))))
-
-
-(defmacro ^{:doc "Thread-first macro."} 
-  -> [x & forms]
-  (if forms
-    (let [form (first forms)
-          threaded (if (list? form)
-                     `(~(first form) ~x ~@(next form))
-                     (list form x))]
-      `(-> ~threaded ~@(next forms)))
-    x))
-
-(defmacro ^{:doc "Thread-last macro."} 
-  ->> [x & forms]
-  (if forms
-    (let [form (first forms)
-          threaded (if (list? form)
-                     `(~(first form) ~@(next form) ~x)
-                     (list form x))]
-      `(->> ~threaded ~@(next forms)))
-    x))
-
-;; ;; METAPROGRAMMING
-
-(def ^{:args '[string]
-       :doc "Reads one object from the string."}
-  read-string
-  py/read_string)
-
-(defmacro ^{:doc "Evaluates a single form (not string)."} 
-  eval [ds]
-  `(py/eval_sexp ~ds *env*))
-
-(defmacro ^{:doc "short for 'print macro expansion'"} 
-  pme [expr]
-  `(print
-    (macroexpand ~expr)))
-
-;; ;; TESTING
-;; ;; the test library is baked into the base library, because it is so lightweight and performance is not a huge concern
-
-(def *tests-have-failed* false)
-
-(defn single-test [name test result]
-  (when (not (= test result))
-    (def *tests-have-failed* true)
-    (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
-
-(defmacro test [& tests]
-  (if (instance? (first tests) str)
-    `(do (def *section-name* ~(first tests))
-         ~(when (rest tests)
-            `(test ~@(rest tests))))
-    `(do
-       (single-test *section-name* ~(first tests) ~(second tests))
-       ~(when (rrest tests)
-          `(test ~@(rrest tests))))))
-
-(defmacro tests [name & tests]
-  `(do
-     (def *section-name* ~name)
-     (prn "ℹ️ Testing `" ~name "`\n")
-     (test ~@tests)
-     (if *tests-have-failed*
-       (prn "❌ Tests completed with some failures. \n")
-       (prn "✅ Tests completed without failures. \n"))))
-
-(defmacro time [& forms]
-  `(do (def t (date))
-       ~@forms
-       (- (date) t)))
-
-(defmacro pmt [& forms]
-  `(print (measure-time ~@forms)))
-
+;; ;; ;; PREDICATES
+
+;; (defn nil? [value]
+;;   (is nil value))
+
+;; (defn zero? [value]
+;;   (= 0 value))
+
+;; (defn ^{:alternative-implementation '(compose not predicate)} 
+;;   complement [predicate]
+;;   (fn [& args] (not (apply predicate args))))
+
+;; (defn not= [a b]
+;;   (not (= a b)))
+
+;; (defn empty? [coll]
+;;   (= 0 (count coll)))
+
+;; (defn even? [n]
+;;   (= (% 2 n) 0))
+
+;; (defn odd? [n]
+;;   (= (% 2 n) 1))
+
+;; (defn pos? [n]
+;;   (< 0 n))
+
+;; (defn neg? [n]
+;;   (< n 0))
+
+;; ;; ; or and and implemented as macros
+
+;; ;; ;; (defmacro or [& clauses]
+;; ;; ;;   :doc "the empty disjunction is false by convention"
+;; ;; ;;   (cond (is-empty clauses) false
+;; ;; ;;         (= 1 (count clauses)) (first clauses)
+;; ;; ;;         true `(do (def cl ~(first clauses))
+;; ;; ;;                   (if cl cl (or ~@(rest clauses))))))
+
+;; ;; ;; (defmacro and [& clauses]
+;; ;; ;;   ;; by convention the empty conjuntion is true
+;; ;; ;;   (sexp))
+
+;; ;; ;; SEQUENCES
+
+;; (defn ^{:doc "Maps a function over a collection eagerly. It would be nice if it could be lazy.
+;;           Calls seq on its coll.
+;;           Also there is the possibility of making it a transducer."} 
+;;   map [f coll]
+;;   (let [s (seq coll)]
+;;     (when s
+;;       (cons (f (first s)) (map f (rest s))))))
+
+;; (defn ^{:doc "Filters over a collection eagerly. Calls seq on its argument."} 
+;;   filter [pred coll]
+;;   (let [s (seq coll)]
+;;     (when s
+;;       (let [f (first s)
+;;             r (rest s)]
+;;         (if (pred f)
+;;           (cons f (filter pred r))
+;;           (filter pred r))))))
+
+;; ;; (defn reduce [] nil)
+;; ;; ;; (defn reduce [f coll initial])
+
+;; ;; ;; (defn take)
+
+;; ;; ;; (defn partition)
+
+;; (defn ^{:doc "Removes the items that satisfy the predicate in coll"} 
+;;   remove [pred coll]
+;;   (filter (complement pred) coll))
+
+;; ;; (comment
+;; ;;   ;; a way of making a mapping transducer
+;; ;;   ([f]
+;; ;;    (fn [rf]
+;; ;;      (fn
+;; ;;        ([] (rf))
+;; ;;        ([result] (rf result))
+;; ;;        ([result input]
+;; ;;         (rf result (f input)))
+;; ;;        ([result input & inputs]
+;; ;;         (rf result (apply f input inputs)))))))
+
+
+;; (defmacro ^{:doc "Thread-first macro."} 
+;;   -> [x & forms]
+;;   (if forms
+;;     (let [form (first forms)
+;;           threaded (if (list? form)
+;;                      `(~(first form) ~x ~@(next form))
+;;                      (list form x))]
+;;       `(-> ~threaded ~@(next forms)))
+;;     x))
+
+;; (defmacro ^{:doc "Thread-last macro."} 
+;;   ->> [x & forms]
+;;   (if forms
+;;     (let [form (first forms)
+;;           threaded (if (list? form)
+;;                      `(~(first form) ~@(next form) ~x)
+;;                      (list form x))]
+;;       `(->> ~threaded ~@(next forms)))
+;;     x))
+
+;; ;; ;; METAPROGRAMMING
+
+;; (def ^{:args '[string]
+;;        :doc "Reads one object from the string."}
+;;   read-string
+;;   py/read_string)
+
+;; (defmacro ^{:doc "Evaluates a single form (not string)."} 
+;;   eval [ds]
+;;   `(py/eval_sexp ~ds *env*))
+
+;; (defmacro ^{:doc "short for 'print macro expansion'"} 
+;;   pme [expr]
+;;   `(print
+;;     (macroexpand ~expr)))
+
+;; ;; ;; TESTING
+;; ;; ;; the test library is baked into the base library, because it is so lightweight and performance is not a huge concern
+
+;; (def *tests-have-failed* false)
+
+;; (defn single-test [name test result]
+;;   (when (not (= test result))
+;;     (def *tests-have-failed* true)
+;;     (prn "❗️ Test failed: `" name "` was expected to be " result " but got " test " instead. \n")))
+
+;; (defmacro test [& tests]
+;;   (if (instance? (first tests) py/str)
+;;     `(do (def *section-name* ~(first tests))
+;;          ~(when (rest tests)
+;;             `(test ~@(rest tests))))
+;;     `(do
+;;        (single-test *section-name* ~(first tests) ~(second tests))
+;;        ~(when (rrest tests)
+;;           `(test ~@(rrest tests))))))
+
+;; (defmacro tests [name & tests]
+;;   `(do
+;;      (def *section-name* ~name)
+;;      (prn "ℹ️ Testing `" ~name "`\n")
+;;      (test ~@tests)
+;;      (if *tests-have-failed*
+;;        (prn "❌ Tests completed with some failures. \n")
+;;        (prn "✅ Tests completed without failures. \n"))))
+
+;; (defmacro time [& forms]
+;;   `(do (def t (date))
+;;        ~@forms
+;;        (- (date) t)))
+
+;; (defmacro pmt [& forms]
+;;   `(print (measure-time ~@forms)))

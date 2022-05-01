@@ -1,29 +1,46 @@
 from re import split
 from simba.exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
-import pyrsistent as p
+# import pyrsistent as p
+from pyrsistent import PMap, PVector, pvector, pmap
 
 class Keyword(str): pass
 
-Vector = p.PVector
-Map = p.PMap
-Map.create = p.pmap
+PersistentVector = PVector
 
-def make_meta_map(m) -> Map:
+def createVector(args):
+    from simba.lang.PersistentList import PersistentList
+    t = pvector(args)
+    # t.cons = lambda self, x: PersistentList.create(x, *self)
+    return t
+
+PersistentVector.create = createVector
+
+PersistentMap = PMap
+
+def createMap(m = None):
+    t = pmap(m) if m is not None else pmap()
+    return t
+
+PersistentMap.create = createMap
+
+
+def make_meta_map(m) -> PersistentMap:
     # the m should be evaluated
-    if isinstance(m, Map):
+    if isinstance(m, PersistentMap):
         return m
     elif isinstance(m, Symbol): # should be 'type'
-        return p.pmap({Keyword('tag'): m})
+        return PersistentMap.create({Keyword('tag'): m})
     elif isinstance(m, Keyword):
-        return p.pmap({m: True})
+        return PersistentMap.create({m: True})
     # elif isinstance(m, str):
-    #     return p.pmap({Keyword('tag'), Symbol(m)})
+    #     return PersistentMap.create({Keyword('tag'), Symbol(m)})
     else:
-        raise SimbaException(f"The type {type(m)} cannot serve as metadata. Only Map, type, and Keyword are allowed.")
+        raise SimbaException(f"The type {type(m)} cannot serve as metadata. Only PersistentMap, type, and Keyword are allowed.")
 
 # Atomic Data Types
 class Symbol:
     def __init__(self, string):
+        # NOTE: much of this logic belongs in the reader
         split_str = split('/', string)
         if string == '/': self.name = '/'; self.namespace = None
         elif len(split_str) > 2: raise SimbaSyntaxError(f"A symbol can only have one namespace qualifier (symbol `{string}`).")
@@ -35,7 +52,9 @@ class Symbol:
             if split_str[0] == '': raise SimbaSyntaxError("A symbol cannot be empty.")
             self.namespace = None
             self.name = split_str[0]
-        self.meta = p.pmap()
+        self.meta = PersistentMap.create()
+        if len(self.name) > 1 and self.name.endswith('.'):
+            self.name = self.name[:-1]
     def __str__(self):
         if self.namespace: return '/'.join([self.namespace, self.name])
         else: return self.name
@@ -64,7 +83,7 @@ class Var:
         # self.dynamic = False
         # self.threadBound = False
         self.root = root
-        self.meta = p.pmap({Keyword('name'): sym, Keyword('ns'): ns})
+        self.meta = PersistentMap.create({Keyword('name'): sym, Keyword('ns'): ns})
     def get(self):
         return self.deref()
     def set(self, v):

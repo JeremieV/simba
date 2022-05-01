@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from simba.exceptions import IllegalStateException, SimbaException
-from simba.lang.types import Map
+from simba.lang.Interfaces import ISeq
+from simba.lang.types import PersistentMap
 
 # todo: implement hashing
 
@@ -9,7 +10,7 @@ class PersistentList:
         self._first = first
         self._rest = rest
         self._count = count
-        self.meta = Map.create() if meta is None else meta
+        self.meta = PersistentMap.create() if meta is None else meta
 
     def first(self):
         return self._first
@@ -75,7 +76,7 @@ class PersistentList:
             ret = __o.cons(e)
         return ret
 
-class EmptyList(PersistentList):
+class EmptyList(PersistentList, ISeq):
     def __init__(self, meta):
         self.meta = meta
         self._count = 0
@@ -86,6 +87,8 @@ class EmptyList(PersistentList):
     def cons(self, o):
         return PersistentList(o, None, 1, self.meta)
     def empty(self):
+        return self
+    def more(self):
         return self
     def peek(self):
         return None
@@ -100,17 +103,17 @@ class EmptyList(PersistentList):
     def __len__(self) -> int:
         return 0
 
-empty = EmptyList(Map.create())
+empty = EmptyList(PersistentMap.create())
 PersistentList.empty = empty
 
-@staticmethod
-def create(*elems):
+# @staticmethod
+def creator(*elems):
     ret = empty
     for e in reversed(elems):
         ret = ret.cons(e)
     return ret
 
-PersistentList.create = create
+PersistentList.create = creator
 
 # tests
 # p = PersistentList.create

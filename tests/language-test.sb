@@ -140,7 +140,24 @@ xyz
 
   "=INTEROP="
   "dot form"
-  '(.inc this) '(. this inc))
+  '(.inc this) '(. this inc)
+
+  "loop/recur"
+  (loop []) nil
+
+  (loop [i 10]
+    ;; (print i)
+    (when (< 0 i)
+     (recur (- i 1)))) nil
+
+  ;; the butlast function
+  (loop [ret [] s [1 2 3]]
+    (if (next s)
+      (recur (conj ret (first s)) (next s))
+      (seq ret))) '(1 2)
+  ;; trying to use recur outside of a loop
+  (try (recur 3)
+       (catch "error")) "error")
   ;;  (do
   ;;    ((fn []
   ;;       (def b 60)
@@ -169,7 +186,7 @@ xyz
   (seq nil) nil
   (seq []) nil
   (seq {"name" identity}) [(t "name" identity)]
-  (seq [1 2 3]) [1 2 3]
+  (seq [1 2 3]) '(1 2 3)
 
   "map"
   (map inc [1 2 3]) '(2 3 4)
@@ -196,10 +213,10 @@ xyz
   ;;      hash-map)
   ;; {"op" "eval"   "code" "*ns*"   "id" "1"}
 
-  (hash-map (t (map inc (t 1 1)))) {2 2} ;; can map over a tuple and that returns a Vector
+  (hash-map (t (map inc (t 1 1)))) {2 2} ;; can map over a tuple and that returns a PersistentVector
 
   ;; transforming a map into a seq
-  (seq (py/eval "{'op': 'eval', 'code': '*ns*', 'id': '1'}"))
+  (apply vector (seq (py/eval "{'op': 'eval', 'code': '*ns*', 'id': '1'}")))
   [(t "op" "eval") (t "code" "*ns*") (t "id" "1")]
 
   "filter"
@@ -359,7 +376,7 @@ xyz
   "new"
   (new py/tuple [1 2 3]) (t 1 2 3)
   ;; to add to the reader:
-  ;; (py/tuple. [1 2 3]) (t 1 2 3)
+  (py/tuple. [1 2 3]) (t 1 2 3)
   )
 
 (tests "metaprogramming"

@@ -68,9 +68,9 @@ def to_string(obj, indent = 0):
     def _escape(s): return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
     if type(obj) == SymbolicExpression:
         return obj.positional[0] + ". " + " ".join(map(lambda e: to_string(e), obj.positional[1:]))
-    elif type(obj) == Vector:                                    
+    elif type(obj) == PersistentVector:                                    
         return "[" + " ".join(map(lambda e: to_string(e), obj)) + "]"
-    elif type(obj) == Map:
+    elif type(obj) == PersistentMap:
         ret = []
         for k in obj.keys():
             ret.extend((to_string(k), to_string(obj[k])))

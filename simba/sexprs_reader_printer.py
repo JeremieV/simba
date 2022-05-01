@@ -1,6 +1,6 @@
 import re
 from simba.exceptions import SimbaSyntaxError
-from simba.lang.types import Symbol, Vector, Map, Keyword, Namespace
+from simba.lang.types import Symbol, PersistentVector, PersistentMap, Keyword, Namespace
 from simba.lang.PersistentList import PersistentList
 import pyrsistent as p
 
@@ -81,13 +81,13 @@ def readMap(reader):
     m = {}
     for name, value in zip(lst[0::2], lst[1::2]):
         m[name] = value
-    return p.pmap(m)
+    return PersistentMap.create(m)
 
 def readSymbolicExpression(reader):
     return PersistentList.create(*read_sequence(reader, '(', ')'))
 
 def readVector(reader):
-    return p.pvector(read_sequence(reader, '[', ']'))
+    return PersistentVector.create(read_sequence(reader, '[', ']'))
 
 def read_form(reader):
     "Reads a single Simba form. Raises an exception for unmatched parens."
@@ -154,9 +154,9 @@ def to_string(obj, indent=0, lb=True) -> str:
         start = ''
     if isinstance(obj, PersistentList):
         return start + " "*indent + "(" + " ".join(to_string(e, indent=indent+2) for e in obj) + ")"
-    elif isinstance(obj, Vector):
+    elif isinstance(obj, PersistentVector):
         return "[" + " ".join(to_string(e) for e in obj) + "]"
-    elif isinstance(obj, Map):
+    elif isinstance(obj, PersistentMap):
         return "{" + " ".join(to_string(k, indent=indent, lb=lb) + " " + to_string(obj[k], indent=indent, lb=lb) + "\n" for k in obj) + "}"
     elif isinstance(obj, Keyword):
         return start + " "*indent + ':' + str(obj)
