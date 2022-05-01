@@ -2,8 +2,21 @@ from re import split
 from simba.exceptions import UnresolvedSymbolError, ImmutableBindingException, SimbaSyntaxError, SimbaException
 # import pyrsistent as p
 from pyrsistent import PMap, PVector, pvector, pmap
+from simba.lang.interfaces import IMeta, IObj
 
-class Keyword(str): pass
+class Keyword(str):
+    @property
+    def sym(self):
+        return Symbol(self)
+
+    def intern(self):
+        return self
+
+    def __call__(self, m, otherwise = None):
+        try:
+            return m[self]
+        except:
+            return otherwise
 
 PersistentVector = PVector
 
@@ -18,8 +31,12 @@ PersistentVector.create = createVector
 PersistentMap = PMap
 
 def createMap(m = None):
-    t = pmap(m) if m is not None else pmap()
-    return t
+    if m is None:
+        return pmap()
+    return pmap(m)
+
+def createMapFromSeq(m):
+    return pmap({m[i]: m[i + 1] for i in range(0, len(m), 2)})
 
 PersistentMap.create = createMap
 
@@ -34,11 +51,13 @@ def make_meta_map(m) -> PersistentMap:
         return PersistentMap.create({m: True})
     # elif isinstance(m, str):
     #     return PersistentMap.create({Keyword('tag'), Symbol(m)})
+    elif m is None:
+        return  PersistentMap.create({})
     else:
         raise SimbaException(f"The type {type(m)} cannot serve as metadata. Only PersistentMap, type, and Keyword are allowed.")
 
 # Atomic Data Types
-class Symbol:
+class Symbol(IMeta, IObj):
     def __init__(self, string):
         # NOTE: much of this logic belongs in the reader
         split_str = split('/', string)
@@ -52,7 +71,7 @@ class Symbol:
             if split_str[0] == '': raise SimbaSyntaxError("A symbol cannot be empty.")
             self.namespace = None
             self.name = split_str[0]
-        self.meta = PersistentMap.create()
+        self._meta = PersistentMap.create()
         if len(self.name) > 1 and self.name.endswith('.'):
             self.name = self.name[:-1]
     def __str__(self):
@@ -65,12 +84,17 @@ class Symbol:
         if __o.name == self.name and __o.namespace == self.namespace: return True
         return False
     def withMeta(self, m):
-        self.meta = self.meta | make_meta_map(m)
+        self._meta = self._meta | make_meta_map(m)
+        return self
+    @property
+    def meta(self):
+        return self._meta
+    def intern(self):
         return self
 
 class Unbound: pass
 
-class Var:
+class Var(IMeta, IObj):
     """If a Var is static it means that its value is the same regardless of the thread.
     A dynamic Var can have different values depending on the thread.
     By default Vars are static, as access is faster for static Vars.
@@ -83,7 +107,7 @@ class Var:
         # self.dynamic = False
         # self.threadBound = False
         self.root = root
-        self.meta = PersistentMap.create({Keyword('name'): sym, Keyword('ns'): ns})
+        self._meta = PersistentMap.create({Keyword('name'): sym, Keyword('ns'): ns})
     def get(self):
         return self.deref()
     def set(self, v):
@@ -97,8 +121,15 @@ class Var:
     #     self.dynamic = b
     #     return self
     def withMeta(self, m):
-        self.meta = self.meta | make_meta_map(m)
+        self._meta = self._meta | make_meta_map(m)
         return self
+    def setMacro(self, v = True):
+        self._meta = self._meta.set(Keyword('macro'), v)
+    @property
+    def meta(self):
+        return self._meta
+    def toSymbol(self):
+        return Symbol(str(self))
 
 # Symbolic Data Types
 

@@ -1,6 +1,6 @@
-# Module containing some of the base functions for simba.
-# Date created: 28 January 2022
-# Author: Jérémie Vaney
+# doc: Module containing some of the base functions for simba.
+# date-created: 28 January 2022
+# author: Jérémie Vaney
 
 import functools as ft
 import itertools as it
@@ -9,7 +9,7 @@ from math import prod
 from types import LambdaType
 
 import pyrsistent
-from simba.lang.Interfaces import ISeq
+from simba.lang.interfaces import ISeq
 from simba.lang.types import PersistentMap, PersistentVector, Symbol
 from simba.lang.PersistentList import PersistentList
 from simba.exceptions import IllegalArgumentException, SimbaException
@@ -58,7 +58,7 @@ def sb_seq(seqable):
     elif seqable is None:
         return None
     else:
-        raise SimbaException(f"Don't know how to make a seq from {type(seqable)}")
+        raise SimbaException(f"Don't know how to make a seq from {type(seqable)}: {seqable}")
 
 def sb_prepend_sexp(e, seq):
     """Defines a generic prepend function that should work on all sequence types.
@@ -151,8 +151,7 @@ def conj(coll, x):
         return coll.append(x)
     if isinstance(coll, PersistentMap):
         # return coll.set(x[], x[])
-        print(x)
-        return None
+        return coll | x
     return coll.cons(x)
 
 def cons(x, seq):
@@ -163,7 +162,9 @@ def cons(x, seq):
     # temporary
     if isinstance(seq, PersistentVector):
         return PersistentList.create(x, *seq)
-    raise Exception()
+    if isinstance(seq, list):
+        return PersistentList.create(x, *seq)
+    raise Exception(f"{x} and {type(seq)} can't cons")
 
 def first(x):
     if isinstance(x, ISeq):
@@ -201,88 +202,87 @@ def more(x):
 def assoc(coll, key, val):
     if coll is None:
         return PersistentMap.create({key, val})
-    return coll.__setitem__(key, val),
+    return coll.set(key, val)
 
 def throw(e): raise e
 
 # define operators that are infix in Python
 repl_env = {
-    'macro?': lambda obj: True if obj.macro else False, # need the environment as a param
+    # 'macro?': lambda obj: True if obj.macro else False, # need the environment as a param
 
     # arithmetic
-    '+': lambda *a: ft.reduce(sb_add, a),
-    '-': lambda a, *s: a-sum(s) if s else -a,
-    '*': lambda *a: prod(a),
-    '/': lambda a, *b: a / prod(b),
-    '%': lambda a, b: b % a,
-    'pow': lambda a, b: a ** b,
-    'floordiv': lambda a, b: a // b,
+    # '+': lambda *a: ft.reduce(sb_add, a),
+    # '-': lambda a, *s: a-sum(s) if s else -a,
+    # '*': lambda *a: prod(a),
+    # '/': lambda a, *b: a / prod(b),
+    # '%': lambda a, b: b % a,
+    # 'pow': lambda a, b: a ** b,
+    # 'floordiv': lambda a, b: a // b,
 
     # comparison
-    '=': lambda a, b: a == b,
-    '!=': lambda a, b: a != b,
-    '>': lambda a, b: a > b,
-    '<': lambda a, b: a < b,
-    '<=': lambda a, b: a <= b,
-    '>=': lambda a, b: a >= b,
+    # '=': lambda a, b: a == b,
+    # '!=': lambda a, b: a != b,
+    # '>': lambda a, b: a > b,
+    # '<': lambda a, b: a < b,
+    # '<=': lambda a, b: a <= b,
+    # '>=': lambda a, b: a >= b,
 
     # identity
-    'is': lambda a, b: a is b,
-    'is-not': lambda a, b: a is not b,
+    # 'is': lambda a, b: a is b,
+    # 'is-not': lambda a, b: a is not b,
 
     # logic
-    'not': lambda a: not a,
-    'and': lambda a, b: a and b,
-    'or': lambda a, b: a or b,
+    # 'not': lambda a: not a,
+    # 'and': lambda a, b: a and b,
+    # 'or': lambda a, b: a or b,
     # 'nand':
     # 'xor':
 
     # membership
-    'in': lambda a, b: a in b,
-    'not-in': lambda a, b: a not in b,
+    # 'in': lambda a, b: a in b,
+    # 'not-in': lambda a, b: a not in b,
 
     # bitwise
-    '&': lambda a, b: a & b,
-    '|': lambda a, b: a | b,
-    '^': lambda a, b: a ^ b,
-    '~': lambda a: ~a,
-    '<<': lambda a, b: a << b,
-    '>>': lambda a, b: a >> b,
+    # '&': lambda a, b: a & b,
+    # '|': lambda a, b: a | b,
+    # '^': lambda a, b: a ^ b,
+    # '~': lambda a: ~a,
+    # '<<': lambda a, b: a << b,
+    # '>>': lambda a, b: a >> b,
 
     # types
     # 'sexp': SymbolicExpression,
-    'symbol': Symbol,
-    'PersistentVector': PersistentVector,
-    'vector': pyrsistent.v,
-    'tuple': tuple,
-    't': lambda *t: t,
-    'HashMap': PersistentMap,
-    'hash-map': pyrsistent.pmap,
-    'set': set,
-    'IllegalArgumentException': IllegalArgumentException,
+    # 'symbol': Symbol,
+    # 'PersistentVector': PersistentVector,
+    # 'vector': pyrsistent.v,
+    # 'tuple': tuple,
+    # 't': lambda *t: t,
+    # 'HashMap': PersistentMap,
+    # 'hash-map': pyrsistent.pmap,
+    # 'set': set,
+    # 'IllegalArgumentException': IllegalArgumentException,
 
     # magic or dunder methods: https://rszalski.github.io/magicmethods/
-    'new': lambda obj, *args, **kwargs: obj(*args, **kwargs),
-    'del': lambda obj: obj.__del__(),
-    'at': lambda i, obj: obj[i], # 'get-item'
-    'set-at': lambda i, new, obj: obj.__setitem__(i, new),
-    'del-at': lambda i, obj: obj.__delitem__(i),
+    # 'new': lambda obj, *args, **kwargs: obj(*args, **kwargs),
+    # 'del': lambda obj: obj.__del__(),
+    # 'at': lambda i, obj: obj[i], # 'get-item'
+    # 'set-at': lambda i, new, obj: obj.__setitem__(i, new),
+    # 'del-at': lambda i, obj: obj.__delitem__(i),
     # I would like to have
     # - special syntax for get, set, del
     # - universal access principle, such that if attr doesn't exist, then tries to call method
     # 'get-attr': sb_uniform_access, # lambda attr, obj: obj.__getattribute__(attr),
-    'set!': lambda obj, attr, value: obj.__setattr__(attr, value),
-    'del-attr': lambda attr, obj: obj.__delattr__(attr),
+    # 'set!': lambda obj, attr, value: obj.__setattr__(attr, value),
+    # 'del-attr': lambda attr, obj: obj.__delattr__(attr),
 
     # sequences
-    'count': toolz.count,
-    'between': lambda low, up = None, seq = None: seq[low:up] if seq is not None else up[low:],
-    'prepend-sexp': sb_prepend_sexp,
-    'prepend': lambda *es: list(es[:-1] + tuple(es[-1])),
+    # 'between': lambda low, up = None, seq = None: seq[low:up] if seq is not None else up[low:],
+    # 'prepend-sexp': sb_prepend_sexp,
+    # 'prepend': lambda *es: list(es[:-1] + tuple(es[-1])),
     # 'append': sb_append,
     'concat': sb_generic_concat, # lambda *lists: ft.reduce(op.add, lists), # this poses certain problems bc its the add operation
-    'reverse': helpers.reverse,
-    'range': range,
+    # 'reverse': helpers.reverse,
+    # 'range': range,
 
     # collections
 

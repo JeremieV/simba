@@ -1,16 +1,16 @@
 from collections.abc import Sequence
 from simba.exceptions import IllegalStateException, SimbaException
-from simba.lang.Interfaces import ISeq
+from simba.lang.interfaces import ISeq, IObj, IMeta
 from simba.lang.types import PersistentMap
 
 # todo: implement hashing
 
-class PersistentList:
+class PersistentList(ISeq, IMeta, IObj):
     def __init__(self, first, rest = None, count = 1, meta = None):
         self._first = first
         self._rest = rest
         self._count = count
-        self.meta = PersistentMap.create() if meta is None else meta
+        self._meta = PersistentMap.create() if meta is None else meta
 
     def first(self):
         return self._first
@@ -18,20 +18,26 @@ class PersistentList:
         if self._count == 1:
             return None
         return self._rest
+    def more(self):
+        s = self.next()
+        return self.empty if s is None else s
+    def cons(self, o):
+        return PersistentList(o, self, self._count + 1, self._meta)
     def peek(self):
         return self._first
     def pop(self):
         if self._rest == None:
-            return self.empty.withMeta(self.meta)
+            return self.empty.withMeta(self._meta)
         return self._rest
     def count(self) -> int:
         return self._count
-    def cons(self, o):
-        return PersistentList(o, self, self._count + 1, self.meta)
     def empty(self):
-        return self.empty.withMeta(self.meta)
+        return self.empty.withMeta(self._meta)
+    @property
+    def meta(self):
+        return self._meta
     def withMeta(self, meta):
-        return PersistentList(self._first, self._rest, self._count, self.meta)
+        return PersistentList(self._first, self._rest, self._count, self._meta)
     def __len__(self):
         return self._count
     def __repr__(self) -> str:
@@ -76,16 +82,16 @@ class PersistentList:
             ret = __o.cons(e)
         return ret
 
-class EmptyList(PersistentList, ISeq):
+class EmptyList(PersistentList, ISeq, IMeta, IObj):
     def __init__(self, meta):
-        self.meta = meta
+        self._meta = meta
         self._count = 0
     def first(self):
         return None
     def next(self):
         return None
     def cons(self, o):
-        return PersistentList(o, None, 1, self.meta)
+        return PersistentList(o, None, 1, self._meta)
     def empty(self):
         return self
     def more(self):
@@ -102,6 +108,9 @@ class EmptyList(PersistentList, ISeq):
         return EmptyList(m)
     def __len__(self) -> int:
         return 0
+    @property
+    def meta(self):
+        return self._meta
 
 empty = EmptyList(PersistentMap.create())
 PersistentList.empty = empty

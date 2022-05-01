@@ -39,11 +39,16 @@ def print_sexp(sexp, syntax = default_syntax, lb=False) -> str:
 
 from simba.exceptions import IllegalStateException, SimbaException, MultipleDispatchException, MultiMethodException, SimbaSyntaxError, UnresolvedSymbolError
 
-def bind_fn_args(fn_args:tuple, _args: tuple) -> dict:
+def bind_fn_args(fn_args, _args, recur = False) -> dict:
+    # print(fn_args)
+    # print(_args)
     names = {}
     for i, arg in enumerate(fn_args):
         if arg.name == '&':
-            names[fn_args[i+1].name] = _args[i:]
+            if not recur:
+                names[fn_args[i+1].name] = _args[i:]
+            else:
+                names[fn_args[i+1].name] = _args[i]
             break
         else:
             names[arg.name] = _args[i]
@@ -73,6 +78,7 @@ class Function:
 
 def signature_match(signature:tuple, args:tuple):
     return True if Symbol('&') in signature else len(args) == len(signature)
+
 class OverloadedFn:
     """Not to be confused with a MultiFn, this is the type that allows for variadic dispatch."""
     def __init__(self, fn:Function):
@@ -94,8 +100,8 @@ class OverloadedFn:
         for tup in self.method_table:
             if signature_match(tup[0], p_args):
                 return tup[1](*p_args, **r_args)
-        n = self.meta['name'] if 'name' in self.meta else ""
-        raise MultipleDispatchException(f"No matching signature for multimethod {n}")
+        raise MultipleDispatchException("No matching signature for multimethod")
+
 class MultiFn:
     """A multimethod. Dispatch is made according to the result of the dispatching function."""
     def __init__(self, name, dispatch_fn):
@@ -293,7 +299,7 @@ def eval_sexp(sexp, env, macro_call = False):
                 raise SimbaSyntaxError(f"\n\tToo many arguments to if in:\n\t{print_sexp(sexp)}")
             cond, then = sexp[1:3]
             evaled_cond = eval_sexp(cond, env)
-            if evaled_cond:
+            if evaled_cond is not None and evaled_cond is not False:
                 sexp = then 
                 continue # TCO
             else:
@@ -378,7 +384,7 @@ def eval_sexp(sexp, env, macro_call = False):
             sexp = loop_sexp
             env  = loop_env
             # bind the new values to the new env
-            env.names = bind_fn_args(loop_args, evaled_args)
+            env.names = bind_fn_args(loop_args, evaled_args, recur = True)
             # return to the top of the loop expression
             continue
         elif is_s and "." == head.name:
@@ -394,14 +400,17 @@ def eval_sexp(sexp, env, macro_call = False):
             if member.startswith('-'):
                 return getattr(target, member)
             # from the Clojure doc: (modified)
-            # If the first operand is a symbol that resolves to a class [OR A MODULE] name, 
+            # If the first operand is a symbol that resolves to a class name, 
             # the access is considered to be to a static member of the named class. 
             # Note that nested classes are named EnclosingClass$NestedClass, per the 
             # JVM spec. Otherwise it is presumed to be an instance member and the first 
             # argument is evaluated to produce the target object.
+
+            # according to the above a module doesnt resolve to a class and thus 
+            # we should try to call the module functions
             if hasattr(target, member):
                 a = getattr(target, member)
-                if not isinstance(target, type) and not isinstance(target, ModuleType) and callable(a):
+                if not isinstance(target, type) and callable(a):
                     return a(*args)
                 else:
                     return a
@@ -471,7 +480,9 @@ def eval_sexp(sexp, env, macro_call = False):
             if not macro_call:
                 evaluated_args = [eval_sexp(e, env) for e in sexp]
             else:
-                evaluated_args = sexp
+                # evaluated_args = sexp
+                # add &form and &env
+                evaluated_args = [sexp[0], sexp, env, *sexp[1:]]
                 macro_call = False
             matched = False
             if isinstance(fun := evaluated_args[0], OverloadedFn):

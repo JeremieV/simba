@@ -173,4 +173,4 @@ def to_string(obj, indent=0, lb=True) -> str:
     elif isinstance(obj, Namespace):
         return f"#namespace[{obj.name}]"
     else:
-        return obj.__str__()
+        return str(obj)
