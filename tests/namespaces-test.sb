@@ -1,7 +1,7 @@
 ;; this file tests the namespace functionality provided by Simba
 ;; can we namespace qualify symbols in the current namespace? ✅
 ;; can we namespace qualify symbols in included namespaces? ✅
-;; is the base namespace included by default ? ✅
+;; is the simba.core namespace included by default ? ✅
 ;; multiple namespaces in a file? ✅
 
 (ns included)
@@ -20,7 +20,7 @@
 (tests "Scopes"
   (.name *ns*) "namespaces-test"
 
-  (base/defn double [x] (* 2 x)) nil ;; base can be namespace/qualified
+  (simba.core/defn double [x] (* 2 x)) nil ;; simba.core can be namespace/qualified
 
   (let [a 30]
   ;; this definition only affects the global a variable and 

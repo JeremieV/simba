@@ -1,4 +1,4 @@
-# doc: Module containing some of the base functions for simba.
+# doc: Module containing some of the simba.core functions for simba.
 # date-created: 28 January 2022
 # author: Jérémie Vaney
 
@@ -54,24 +54,26 @@ def sb_seq(seqable):
     elif isinstance(seqable, dict):
         return PersistentList.create(*seqable.items())
     elif isinstance(seqable, PersistentList):
+        if len(seqable) == 0:
+            return None
         return seqable
     elif seqable is None:
         return None
     else:
         raise SimbaException(f"Don't know how to make a seq from {type(seqable)}: {seqable}")
 
-def sb_prepend_sexp(e, seq):
-    """Defines a generic prepend function that should work on all sequence types.
-    Returns an object of the same type as the second argument.
-    If second arg is None, defaults to a SymbolicExpression"""
-    if seq is None:
-        return PersistentList.create(e)
-    # elif isinstance(seq, tuple):
-    #     return (e,) + seq
-    # elif isinstance(seq, list):
-    #     return [e] + seq
-    # elif isinstance(seq, SymbolicExpression):
-    return PersistentList.create(e) + PersistentList.create(*seq)
+# def sb_prepend_sexp(e, seq):
+#     """Defines a generic prepend function that should work on all sequence types.
+#     Returns an object of the same type as the second argument.
+#     If second arg is None, defaults to a SymbolicExpression"""
+#     if seq is None:
+#         return PersistentList.create(e)
+#     # elif isinstance(seq, tuple):
+#     #     return (e,) + seq
+#     # elif isinstance(seq, list):
+#     #     return [e] + seq
+#     # elif isinstance(seq, SymbolicExpression):
+#     return PersistentList.create(e) + PersistentList.create(*seq)
 
 def sb_generic_concat(a, b = None):
     """Python has no built-in way of concatenating sequences of different types.
@@ -204,6 +206,12 @@ def assoc(coll, key, val):
         return PersistentMap.create({key, val})
     return coll.set(key, val)
 
+def pop(coll):
+    return coll.pop()
+
+def peek(coll):
+    return coll.peek()
+
 def throw(e): raise e
 
 # define operators that are infix in Python
@@ -293,7 +301,7 @@ repl_env = {
 
     # reflection
     # interop
-    'get': lambda e, obj: obj[e],
-    'date': time.time,
-    'py-exec': helpers.exec_with_return,
+    # 'get': lambda e, obj: obj[e],
+    # 'date': time.time,
+    # 'py-exec': helpers.exec_with_return,
 }

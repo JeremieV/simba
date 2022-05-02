@@ -9,22 +9,25 @@
 (import traceback)
 
 (def host "127.0.0.1")
-(def port 58550)
-(def debug false)
+(def port 58552)
+(def debug true)
 
 (def *running* true)
 (def *middleware* [])
 (def *sessions* [])
 (def *session* "")
 
-(defn ^{:doc "Returns a new uuid string"} 
-  create-session []
+(def at operator/getitem)
+
+(defn create-session
+  "Returns a new uuid string"
+  []
   (str (uuid/uuid4)))
 
 (defn switch-to-new-session []
-  (do (def *session* (create-session))
-      (def *sessions* (cons *session* *sessions*))
-      *session*))
+  (def *session* (create-session))
+  (def *sessions* (cons *session* *sessions*))
+  *session*)
 
 (defn get-session []
   (if (= *session* "")
@@ -32,13 +35,13 @@
     *session*))
 
 (defn decode [m]
-  (if (instance? m bytes)
+  (if (instance? builtins/bytes m)
     (.decode m "utf-8")
     m))
 
 (defn encode [r] (bencodepy/encode (thaw r)))
 
-(defn ^{:doc "Takes care of encoding the response and sending multiple messages at a time."} 
+(defn ^{:doc "Takes care of encoding the response and sending multiple messages at a time."}
   send [response conn]
   (if (vector? response)
     (map (fn [r] (.sendall conn (encode r)))
@@ -49,7 +52,7 @@
   (prn "nREPL server started on port " port " on host " host " - nrepl://" host ":" port "\n")
 
   (with [s (socket/socket socket/AF_INET socket/SOCK_STREAM)]
-        (.bind s (t host port))
+        (.bind s (builtins/tuple [host port]))
         (.listen s)
         (let [accept (.accept s)
               conn (first accept)
@@ -59,14 +62,14 @@
                   (let [data (.recv conn 1024)
                         decoded (->> (bencodepy/decode data)
                                      (map (partial map decode))
-                                     hash-map)
+                                     PersistentMap/create)
                         _ (when debug (print "<--" decoded))
                         response (handle decoded)
                         _ (when debug (print "-->" response))]
                     (send response conn)))))))
 
 (defn done-message [message]
-  {:id (at "id" message)
+  {:id (at message "id")
    :session (get-session)
    :status ["done"]})
 
@@ -88,40 +91,41 @@
          "swap-middleware"
          "Other common messages: `info` and `complete`")
 
-(defmulti handle (partial at "op"))
+(defmulti handle (fn [x] (at x "op")))
 
 (defmethod handle "eval"
   [message]
-  (try [{:id (at "id" message)
+  (try [{:id (at message "id")
          :ns (py/print_sexp *ns*)
          :session (get-session)
-         :value (->> (at "code" message)
+         :value (->> (at message "code")
                      read-string
                      eval
-                     py/print_sexp)}
+                     print-sexp)}
         (done-message message)]
 
        (catch
-        [{:id (at "id" message)
+        [{:id (at message "id")
           :session (get-session)
-          :err (+ "Execution error in " (py/print_sexp *ns*) ".\n"
+          :err (+ "Execution error in " (print-sexp *ns*) ".\n"
                   (str *error*))}
          {:ex "class java.lang.Exception"
           "'root-ex'" "class java.lang.Exception"
-          :id (at "id" message)
+          :id (at message "id")
           :session (get-session)
           :status ["eval-error"]}
          (done-message message)])))
 
-(defmethod handle "clone"
-  [message]
-  {"id" (at "id" message)
-   "new-session" (switch-to-new-session)
-   "status" ["done"]})
-
 (defmethod handle "describe"
   [message]
   {:op "content"})
+
+(defmethod handle "clone"
+  [m]
+  ;; there is an odd bug here it tries to evaluate m
+  {:id 2; (at m "id")
+   :new-session (switch-to-new-session)
+   :status ["done"]})
 
 (defmethod handle "default"
   [message]
@@ -142,7 +146,7 @@
 (defmethod handle "stacktrace"
   [message]
   [{:class "java.lang.Exception"
-    :id (at "id" message)
+    :id (at message "id")
     :message "Error message"
     :session (get-session)
     :stacktrace []}
@@ -150,7 +154,7 @@
 
 (defmethod handle "close"
   [message]
-  (def *sessions* (remove (partial = (at "session" message)) *sessions*))
+  (def *sessions* (remove (partial = (at message "session")) *sessions*))
   (def *session* "")
   (def *running* false)
   (prn "The current session was closed successfully.\n")

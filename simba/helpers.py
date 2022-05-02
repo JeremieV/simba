@@ -122,7 +122,7 @@ def return_test_ns(ast_list):
     return res
 
 def get_base_namespace(reader):
-    return read_files(reader, ['libraries/base.sb'])
+    return read_files(reader, ['libraries/simba.core.sb'])
 
 #== Exec except that it returns the value ==#
 # Taken from https://stackoverflow.com/questions/33409207/how-to-return-value-from-exec-in-function

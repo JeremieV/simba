@@ -1,5 +1,5 @@
 (ns examples
-  (include base)
+  (include simba.core)
 
   ;; a function may have an indefinite amount of arguments:
   ;; such functions are called variadic functions

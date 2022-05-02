@@ -16,11 +16,11 @@ setup.cfg
 ./simba/simplest_test_suite.py
 ./simba/test_runner.py
 ./simba/sb/__init__.py
-./simba/sb/base.sb
+./simba/sb/simba.core.sb
 ./simba/sb/combinators.sb
 ./simba/sb/examples.sb
 simba/sb/__init__.py
-simba/sb/base.sb
+simba/sb/simba.core.sb
 simba/sb/combinators.sb
 simba/sb/examples.sb
 simba/sb/standard.sb.txt

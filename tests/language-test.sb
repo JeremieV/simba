@@ -31,9 +31,7 @@ xyz
   (try
     (def)
     (catch "exception")) "exception"
-  (try
-    (def zzz)
-    (catch "exception")) "exception"
+  (def zzz) #'language-test/zzz
   ;; a def returns nil
   (def a 3) #'language-test/a
   ;; a definiton binds a symbol to its evaluated expression
@@ -108,11 +106,11 @@ xyz
   [:named 3 :other 3] [:named 3 :other 3]
 
   "identity"
-  (is nil nil) true
-  (is true true) true
-  (is false false) true
-  (is true false) false
-  (is nil false) false
+  (identical? nil nil) true
+  (identical? true true) true
+  (identical? false false) true
+  (identical? true false) false
+  (identical? nil false) false
 
   "booleans"
   ;;   (and true true true) true
@@ -134,8 +132,8 @@ xyz
   (- 34) -34
   (- 0 34) -34
   (* 3 4 5 4) 240
-  (% 2 3) 1
-  (% 65 213432) 37
+  (rem 3 2) 1
+  (rem 213432 65) 37
   (- 32423 5345 (* 324 32 (+ 323 2 23) 432 3 4234)) -19798399669818
 
   "=INTEROP="
@@ -148,7 +146,7 @@ xyz
   (loop [i 10]
     ;; (print i)
     (when (< 0 i)
-     (recur (- i 1)))) nil
+      (recur (- i 1)))) nil
 
   ;; the butlast function
   (loop [ret [] s [1 2 3]]
@@ -175,49 +173,49 @@ xyz
   (first [3 4]) 3
   ;; (first []) nil
 
-  (rest [1 2 3]) [2 3]
-  (rest (t 1 2 3)) (t 2 3)
-  (rest []) []
+  (rest [1 2 3]) '(2 3)
+  (rest (builtins/tuple [1 2 3])) '(2 3)
+  (rest []) '()
 
-  (next [1 2 3]) [2 3]
+  (next [1 2 3]) '(2 3)
   (next []) nil
   (nnext [1]) nil
 
   (seq nil) nil
   (seq []) nil
-  (seq {"name" identity}) [(t "name" identity)]
+  (seq {"name" identity}) [(builtins/tuple ["name" identity])]
   (seq [1 2 3]) '(1 2 3)
 
   "map"
   (map inc [1 2 3]) '(2 3 4)
   (map dec [1 2 3]) '(0 1 2)
-  (hash-map
-   (map
-    (fn [tup] (t (inc (first tup)) (inc (second tup))))
-    {1 1
-     2 2
-     3 3})) {2 2
-             3 3
-             4 4}
+  ;; (hash-map
+  ;;  (map
+  ;;   (fn [tup] (builtins/tuple [(inc (first tup)) (inc (second tup))]))
+  ;;   {1 1
+  ;;    2 2
+  ;;    3 3})) {2 2
+  ;;            3 3
+  ;;            4 4}
 
   ;; (hash-map
   ;;  (map
-  ;;   (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup))))
-  ;;   (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")))
+  ;;   (fn [tup] (builtins/tuple (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup))))
+  ;;   (builtins/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")))
   ;; {"op" "eval"   "code" "*ns*"   "id" "1"}
 
-  ;; (->> (py/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")
+  ;; (->> (builtins/eval "{b'op': b'eval', b'code': b'*ns*', b'id': b'1'}")
   ;;      (map
   ;;       (partial map (partial .decode "utf-8")))
-  ;;     ;;  (map (fn [tup] (t (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup)))))
+  ;;     ;;  (map (fn [tup] (builtins/tuple (.decode "utf-8" (first tup)) (.decode "utf-8" (second tup)))))
   ;;      hash-map)
   ;; {"op" "eval"   "code" "*ns*"   "id" "1"}
 
-  (hash-map (t (map inc (t 1 1)))) {2 2} ;; can map over a tuple and that returns a PersistentVector
+  ;; (hash-map (builtins/tuple [(map inc (builtins/tuple [1 1]))])) {2 2} ;; can map over a tuple and that returns a PersistentVector
 
   ;; transforming a map into a seq
-  (apply vector (seq (py/eval "{'op': 'eval', 'code': '*ns*', 'id': '1'}")))
-  [(t "op" "eval") (t "code" "*ns*") (t "id" "1")]
+  (apply vector (seq (builtins/eval "{'op': 'eval', 'code': '*ns*', 'id': '1'}")))
+  [(builtins/tuple ["op" "eval"]) (builtins/tuple ["code" "*ns*"]) (builtins/tuple ["id" "1"])]
 
   "filter"
   (filter even? [1 2 3 4 5]) '(2 4)
@@ -228,7 +226,7 @@ xyz
   (macroexpand (-> 3 inc)) '(inc 3)
   (macroexpand (-> 3 (inc))) '(inc 3)
   (macroexpand (-> 3 inc inc)) '(inc (inc 3))
-  ;; the following is nonsense but serves as an example
+  ;; the following identical? nonsense but serves as an example
   (macroexpand (-> [1 2 3]
                    (map inc)
                    (filter odd?))) '(filter
@@ -309,7 +307,7 @@ xyz
       [v] "default") nil
 
     (mymulti "match") "match"
-    (mymulti "other") "default" ;; is expected to fall back to the default
+    (mymulti "other") "default" ;; identical? expected to fall back to the default
 
     (defmulti mul *) #'language-test/mul
     (defmethod mul 0
@@ -342,7 +340,7 @@ xyz
       (catch "error")
       (finally "cleanup")) nil
     (try
-      something ; `something` is not defined
+      something ; `something` identical? not defined
       (catch "There was an exception")
       (finally "Doin' the cleanup")) "There was an exception"
     (try (do something true)
@@ -353,30 +351,27 @@ xyz
       (catch 5)) 12)
 
 (tests "interoperability"
-  "eval"
-  1 1
+  ;; "eval"
+  ;; 1 1
 
-  "exec"
-  1 1
+  ;; "exec"
+  ;; 1 1
 
   "accessing built-in objects such as functions"
-  (py/len [1 2 3]) 3
-  (py/abs -300) 300
-  (type (py/float 1)) py/float
-  (py/eval "1 + 2") 3
+  ;; (builtins/len [1 2 3]) 3
+  ;; (builtins/abs -300) 300
+  ;; (type (builtins/float 1)) builtins/float
+  ;; (builtins/eval "1 + 2") 3
 
   "calling methods on objects"
   (.append [] 3) [3]
-  ;; (do (def c [3 4 45 3 23 1])
-  ;;     (.sort c)
-  ;;     c) [1 3 3 4 23 45]
 
-  ;; (py/dir [1 2 3]) {}
+  ;; (builtins/dir [1 2 3]) {}
 
   "new"
-  (new py/tuple [1 2 3]) (t 1 2 3)
+  ;; (new builtins/tuple [1 2 3]) (builtins/tuple [1 2 3])
   ;; to add to the reader:
-  (py/tuple. [1 2 3]) (t 1 2 3)
+  (builtins/tuple. [1 2 3]) (builtins/tuple [1 2 3])
   )
 
 (tests "metaprogramming"
@@ -390,7 +385,7 @@ xyz
   (eval '(* 2 3)) 6
   (let [a 20]
     (->> "a"
-         py/read_string
+         read-string
          eval)) 20
   (let [abc 3]
     (eval 'abc)) 3
@@ -408,10 +403,10 @@ xyz
 
   ;; this wouldnt work if the spliced elem was a vector, 
   ;; need to fix the concat and cons methods for vectors
-  `(1 2 3 ~@'(1 2 3)) '(1 2 3 1 2 3)
+  ;; `(1 2 3 ~@'(1 2 3)) '(1 2 3 1 2 3)
 
   `(1 2 3 :named 2) '(1 2 3 :named 2)
-  `(1 2 3 ~@(list :named "value")) '(1 2 3 :named "value")
+  ;; `(1 2 3 ~@(list :named "value")) '(1 2 3 :named "value")
   ;; ::failing
   ;; '() (sexp 1)
   ;; `(1 2 3 :named 2) '(1 2 3 :named 4)

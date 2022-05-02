@@ -1,5 +1,5 @@
 (ns recursion-test
-  (include base)
+  (include simba.core)
 
   ;; (defn sum-to [n acc]
   ;;   (if (= n 0)

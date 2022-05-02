@@ -89,8 +89,11 @@ class Symbol(IMeta, IObj):
     @property
     def meta(self):
         return self._meta
-    def intern(self):
-        return self
+    @staticmethod
+    def intern(ns:str, name:str = ""):
+        if name:
+            return Symbol('/'.join([ns, name]))
+        return Symbol(name)
 
 class Unbound: pass
 
@@ -129,7 +132,7 @@ class Var(IMeta, IObj):
     def meta(self):
         return self._meta
     def toSymbol(self):
-        return Symbol(str(self))
+        return Symbol(str(self)[2:])
 
 # Symbolic Data Types
 

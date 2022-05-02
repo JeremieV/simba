@@ -41,7 +41,7 @@ class PersistentList(ISeq, IMeta, IObj):
     def __len__(self):
         return self._count
     def __repr__(self) -> str:
-        return f"#SimbaPersistentList({' '.join(str(e) for e in self)})"
+        return f"({' '.join(str(e) for e in self)})"
     def __getitem__(self, sub):
         if isinstance(sub, slice):
             if sub.start is not None and sub.stop is None and (sub.step is None or sub.step == 1):
@@ -123,6 +123,7 @@ def creator(*elems):
     return ret
 
 PersistentList.create = creator
+PersistentList.creator = creator
 
 # tests
 # p = PersistentList.create

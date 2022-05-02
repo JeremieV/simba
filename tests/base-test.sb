@@ -1,9 +1,9 @@
-(ns base-test
-  (include base)
+(ns simba.core-test
+  (include simba.core)
   (include test)
 
   (st
-   "base"
+   "simba.core"
 
    (defn myf [a b]
      (* a b))
@@ -31,7 +31,7 @@
              true    "toujours et encore"))
       '(if (= 1 1)
          "1 = 1"
-         (base/cond
+         (simba.core/cond
            (= 2 2) "2 = 2"
            true "toujours et encore")))
    

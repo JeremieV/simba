@@ -14,7 +14,7 @@ import pyrsistent as p
 # import antlr4
 import simba.sexprs_reader_printer as sexprs_reader_printer
 # import src.simba.dotexprs_reader_printer
-from simba.lang.types import PersistentVector, Symbol, PersistentMap, PersistentVector, Namespace, Environment, Keyword, Var
+from simba.lang.types import PersistentVector, Symbol, PersistentMap, PersistentVector, Namespace, Environment, Keyword, Var, Unbound
 from simba.lang.PersistentList import PersistentList
 import simba.helpers as helpers
 import simba.sb as sb
@@ -130,7 +130,7 @@ def convert(string, _from, to):
 #     if print_result: print(print_sexp(result))
 
 def simba_repl(multi = False):
-    """Command-line repl that executes everything in the base namespace by default."""
+    """Command-line repl that executes everything in the simba.core namespace by default."""
     eof = False
     prompt_session = PromptSession(FileHistory('~/.simba_history'))
     # load the standard library
@@ -282,6 +282,10 @@ def eval_sexp(sexp, env, macro_call = False):
         head = sexp[0]
         is_s = isinstance(head, Symbol)
         if is_s and "def" == head.name:
+            if len(sexp) == 2:
+                _name = sexp[1]
+                env.ns.set(_name, (_var := Var(env.ns, _name, root = Unbound())).withMeta(_name.meta | _var.meta))
+                return _var
             if len(sexp) < 3:
                 raise SimbaSyntaxError(f"\n\t`def` statement has invalid argument pattern in:\n\t{print_sexp(sexp)}")
             _name = sexp[1]
@@ -329,7 +333,7 @@ def eval_sexp(sexp, env, macro_call = False):
                 # for now, the entire enclosing scope in referenced. This may impair garbage collection too much.
                 # in the future, the bindings will be only the ones references in the closure
                 return Function(argVector, body, bindings, optname = fn_name, optmap = fn_optmap)
-            elif isinstance(sexp[1+offset], PersistentList):
+            elif isinstance(sexp[1+offset], PersistentList) or isinstance(sexp[1+offset], list): # the latter is temporary
                 # anonymous multimethod (with multiple method declarations)
                 fn = Function(sexp[1+offset][0], sexp[1+offset][1:], env, optname = fn_name, optmap = fn_optmap)
                 for exp in sexp[2+offset:]:
@@ -457,8 +461,8 @@ def eval_sexp(sexp, env, macro_call = False):
                     env = Namespace(name = ns_name)
                 # add it to the list of loaded namespaces
                 loaded_ns[ns_name] = env
-            # includes the base library and imports all classes from java.lang
-            require(['base'], env.ns, include = True)
+            # includes the simba.core library and imports all classes from java.lang
+            require(['simba.core'], env.ns, include = True)
             # requires/refers other namespaces and vars as specified
             break
         elif is_s and "require" == head.name:
@@ -474,6 +478,15 @@ def eval_sexp(sexp, env, macro_call = False):
         elif is_s and "macroexpand" == head.name:
             if len(sexp) != 2: return Exception("`macroexpand` expected 1 argument.")
             return macroexpand(sexp[1], env)
+        elif is_s and "import" == head.name:
+            for m in sexp[1:]:
+                if isinstance(m, Symbol):
+                    ret = eval_sexp(PersistentList.create(Symbol('def'), m, helpers.exec_with_return(f"import {print_sexp(m)};{print_sexp(m)}")), env)
+                else:
+                    module = m[0].name
+                    for c in m[1:]:
+                        ret = eval_sexp(PersistentList.create(Symbol('def'), c, helpers.exec_with_return(f"from {module} import {c.name};{c.name}")), env)
+            return ret
         else:
             ## Non-Special Forms ##
             ## evaluate the args ##
@@ -523,7 +536,10 @@ def eval_sexp(sexp, env, macro_call = False):
                 ## apply the head ##
                 # If we reach this point it means that the object in the head is a python callable
                 # we must first parse the named arguments
-                return fun(*evaluated_args[1:])
+                try:
+                    return fun(*evaluated_args[1:])
+                except Exception as e:
+                    raise SimbaException(e, "in ", print_sexp(sexp))
 
 
 def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):
@@ -551,7 +567,7 @@ def namespaced_eval(ast_list, run_tests = False, main_namespace = "main"):
 def main():
     """Serves as an entrypoint for the script."""
     global program_ast
-    base_lib = read_text(sb, 'base.sb')
+    base_lib = read_text(sb, 'core.sb')
     # when called with no arguments, the command is a terminal repl
     if len(sys.argv) == 1:
         program_ast = helpers.read_string_eager(base_lib)

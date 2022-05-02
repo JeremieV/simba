@@ -1,5 +1,5 @@
 (ns datastructures-test
-  (include base)
+  (include simba.core)
   (include test)
 
 ;;   (defn hello [n]
